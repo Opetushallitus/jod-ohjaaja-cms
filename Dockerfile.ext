@@ -1,1 +1,41 @@
 # Any instructions here will be appended to the end of the Dockerfile created by `createDockerfile`.
+RUN rm /opt/liferay/osgi/portal/*.commerce.*.jar \
+  && rm -rf /opt/liferay/osgi/state/* \
+  && rm -rf /opt/liferay/data/elasticsearch7 \
+  && rm -rf /opt/liferay/data/hypersonic
+
+FROM public.ecr.aws/amazoncorretto/amazoncorretto:21-al2023-headless
+
+RUN dnf -qy update \
+    && dnf -qy upgrade \
+    && dnf -qy install --setopt=install_weak_deps=0 --setopt=tsflags=nodocs \
+    shadow-utils \
+    file \
+    ghostscript \
+    google-perftools \
+    ImageMagick \
+    tomcat-native \
+    procps \
+    findutils \
+    tree \
+    && adduser --system liferay --shell /bin/false --home /opt/liferay \
+    && dnf -qy remove shadow-utils \
+    && dnf clean all
+
+ENV LIFERAY_HOME=/opt/liferay
+ENV LIFERAY_PID="${LIFERAY_HOME}/liferay.pid"
+ENV LIFERAY_PRODUCT_NAME=Liferay
+
+COPY --from=0 --chown=liferay:liferay /opt/liferay /opt/liferay
+COPY --from=0 --chown=liferay:liferay /usr/local/bin /usr/local/bin
+
+COPY --chown=liferay:liferay deploy /mnt/liferay/deploy
+COPY --chown=liferay:liferay scripts /mnt/liferay/scripts
+COPY --chown=liferay:liferay configs /home/liferay/configs
+COPY --chown=liferay:liferay 100_liferay_image_setup.sh /usr/local/liferay/scripts/pre-configure/100_liferay_image_setup.sh
+
+EXPOSE 8080
+USER liferay:liferay
+WORKDIR /opt/liferay
+
+ENTRYPOINT ["/usr/local/bin/liferay_entrypoint.sh"]
