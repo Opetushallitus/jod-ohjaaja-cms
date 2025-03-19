@@ -1,0 +1,28 @@
+#!/bin/bash
+set -eu -o pipefail
+
+# Fetch the latest changes from the remote repository
+git fetch -q origin main
+
+# Check commit messages for new commits
+NEW_COMMITS=$(git log origin/main..HEAD --pretty=format:%H)
+
+PATTERN="^OPHJOD-[0-9]+: [A-Z].*"
+
+for COMMIT in $NEW_COMMITS; do
+  COMMIT_MSG=$(git log --format=%B -n 1 $COMMIT)
+  if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+    echo "Error: Commit message '$COMMIT_MSG' does not match the required format."
+    echo "Commit message must start with 'OPHJOD-<issue number>: ' and the first character after the colon must be capitalized."
+    exit 1
+  fi
+
+  COMMIT_EMAIL=$(git log --format=%ae -n 1 $COMMIT)
+  if ! echo "$COMMIT_EMAIL" | grep -qvE "users.noreply.github.com"; then
+    echo "Error: Commit email '$COMMIT_EMAIL' does not match the required format."
+    echo "Commit email must not be a GitHub noreply email."
+    exit 1
+  fi
+done
+
+./gradlew --console=plain --offline --quiet check

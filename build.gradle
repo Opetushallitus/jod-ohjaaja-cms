@@ -1,1 +1,14 @@
 // Check GETTING_STARTED.markdown for information regarding usage.
+tasks.register('installGitHooks', Copy) {
+  from("${rootProject.rootDir}/scripts/git-hooks") {
+    include 'pre-*'
+  }
+  into "${rootProject.rootDir}/.git/hooks"
+  filePermissions { unix(0775) }
+}
+
+if (System.getenv("CI") == null) {
+  buildDockerImage {
+    dependsOn 'installGitHooks'
+  }
+}
