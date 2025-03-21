@@ -16,5 +16,39 @@ Licensed under the European Union Public Licence EUPL-1.2 or later.
 ## Getting Started
 
 This is a Liferay Workspace – A structured development environment for managing Liferay projects.
-Check GETTING_STARTED.markdown for information regarding usage.
+
+### Prerequisites
+
+Before setting up the local development environment, ensure that you have the following installed:
+
+- Java 21
+- Gradle
+- Docker
+- Docker Compose
+
+### Setting Up the Local Development Environment
+
+To build the Docker image for the application, run the following command:
+
+```sh
+./gradlew clean buildDockerImage
+```
+
+Once the Docker image is built, start the local test environment using:
+
+```sh
+docker-compose up
+```
+
+### Deploying Changes to Running Modules
+
+When the test environment is running, you can deploy changes to modules with the following command:
+
+```sh
+./gradlew deploy
+```
+
+This command will apply updates to the running environment without requiring a restart.
+
+
 

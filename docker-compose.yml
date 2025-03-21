@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres1
+    ports:
+      - "5431:5432"
+    environment:
+      POSTGRES_USER: liferay
+      POSTGRES_PASSWORD: liferay
+      POSTGRES_DB: lportal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+
+  papercut:
+    image: changemakerstudiosus/papercut-smtp:latest
+    container_name: papercut1
+    ports:
+      - "8081:80"
+      - "25:25"
+    networks:
+      - default
+
+  liferay:
+    image: jod-ohjaaja-cms-liferay:7.4.3.129-ga129
+    container_name: liferay1
+    ports:
+      - "8080:8080"
+      - "11311:11311"
+    depends_on:
+      - postgres
+    environment:
+      - LIFERAY_WORKSPACE_ENVIRONMENT=local
+      - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_DRIVER_UPPERCASEC_LASS_UPPERCASEN_AME=org.postgresql.Driver
+      - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_URL=jdbc:postgresql://postgres:5432/lportal?useUnicode=true&characterEncoding=UTF-8&useFastDateParsing=false
+      - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_USERNAME=liferay
+      - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_PASSWORD=liferay
+    volumes:
+      - ./local/data:/opt/liferay/data
+      - ./build/docker/deploy:/mnt/liferay/deploy
+    networks:
+      - default
+volumes:
+  pgdata:
+    driver: local
+

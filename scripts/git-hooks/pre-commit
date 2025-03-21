@@ -1,0 +1,4 @@
+#!/bin/bash
+if ! git diff --cached --quiet --diff-filter=ACM -- ":modules/*/src/**"; then
+  ./gradlew --console=plain --quiet --offline spotlessCheck
+fi
