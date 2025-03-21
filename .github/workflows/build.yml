@@ -94,3 +94,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy-dev:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: package
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+    secrets: inherit
+    with:
+      environment: dev
+      tag: ${{ needs.package.outputs.tag }}
+
+  deploy-test:
+    if: github.ref == 'refs/heads/main'
+    needs:
+      - package
+      - deploy-dev
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+    secrets: inherit
+    with:
+      environment: test
+      tag: ${{ needs.package.outputs.tag }}
