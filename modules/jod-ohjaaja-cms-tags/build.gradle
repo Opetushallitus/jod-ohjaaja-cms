@@ -1,0 +1,23 @@
+plugins {
+  id "com.diffplug.spotless" version "7.0.2"
+}
+dependencies {
+	compileOnly group: "com.liferay.portal", name: "release.portal.api", version: "latest.release"
+}
+spotless {
+  java {
+    target 'src/*/**/*.java'
+    googleJavaFormat()
+    licenseHeader '''\
+    /*
+     * Copyright (c) $YEAR The Finnish Ministry of Education and Culture, The Finnish
+     * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+     * Education (Opetushallitus) and The Finnish Development and Administration centre
+     * for ELY Centres and TE Offices (KEHA).
+     *
+     * Licensed under the EUPL-1.2-or-later.
+     */
+
+     '''.stripIndent()
+  }
+}
