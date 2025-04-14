@@ -7,7 +7,9 @@
  * Licensed under the EUPL-1.2-or-later.
  */
 
-package fi.okm.jod.ohjaaja.cms.tags;
+package fi.okm.jod.ohjaaja.cms.tags.dto.converter;
+
+import static fi.okm.jod.ohjaaja.cms.tags.Constants.JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE;
 
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.asset.kernel.model.AssetCategoryConstants;
@@ -26,7 +28,10 @@ import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.vulcan.dto.converter.DTOConverter;
 import com.liferay.portal.vulcan.dto.converter.DTOConverterContext;
+import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.portlet.asset.util.AssetVocabularySettingsHelper;
+import fi.okm.jod.ohjaaja.cms.tags.dto.JodCategoryType;
+import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import java.util.Locale;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
@@ -43,7 +48,7 @@ import org.osgi.service.component.annotations.Reference;
     immediate = true,
     service = DTOConverter.class)
 public class JodOhjaajaCmsTagsDtoConverter
-    implements DTOConverter<AssetCategory, JodTaxonomyCategory> {
+    implements DTOConverter<AssetCategory, JodTaxonomyCategoryDto> {
 
   @Reference private AssetCategoryLocalService assetCategoryLocalService;
 
@@ -53,34 +58,32 @@ public class JodOhjaajaCmsTagsDtoConverter
 
   private static final Log log = LogFactoryUtil.getLog(JodOhjaajaCmsTagsDtoConverter.class);
 
-  private static final String JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE = "jod-ohjaaja-cms-tags";
-
   private static final long JOD_GROUP_ID = 20117;
 
   @Override
   public String getContentType() {
-    return JodTaxonomyCategory.class.getName();
+    return JodTaxonomyCategoryDto.class.getName();
   }
 
   @Override
-  public JodTaxonomyCategory toDTO(DTOConverterContext dtoConverterContext) throws Exception {
+  public JodTaxonomyCategoryDto toDTO(DTOConverterContext dtoConverterContext) throws Exception {
     var assetCategory =
         assetCategoryLocalService.getAssetCategory((Long) dtoConverterContext.getId());
     return toJodTaxonomyCategory(assetCategory);
   }
 
   @Override
-  public JodTaxonomyCategory toDTO(
+  public JodTaxonomyCategoryDto toDTO(
       DTOConverterContext dtoConverterContext, AssetCategory assetCategory) {
     return toJodTaxonomyCategory(assetCategory);
   }
 
   @Override
-  public JodTaxonomyCategory toDTO(AssetCategory assetCategory) {
+  public JodTaxonomyCategoryDto toDTO(AssetCategory assetCategory) {
     return toJodTaxonomyCategory(assetCategory);
   }
 
-  private JodTaxonomyCategory toJodTaxonomyCategory(AssetCategory assetCategory) {
+  private JodTaxonomyCategoryDto toJodTaxonomyCategory(AssetCategory assetCategory) {
     try {
       if (assetCategory.getVocabularyId() == 0) {
         return null;
@@ -93,15 +96,15 @@ public class JodOhjaajaCmsTagsDtoConverter
         return null;
       }
 
-      return new JodTaxonomyCategory() {
-        {
-          setCategoryType(
-              JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE.equals(
-                      assetVocabulary.getExternalReferenceCode())
-                  ? JodCategoryType.TAG
-                  : JodCategoryType.CATEGORY);
-        }
-      };
+      return new JodTaxonomyCategoryDto(
+          assetCategory.getCategoryId(),
+          assetCategory.getName(),
+          LocalizedMapUtil.getI18nMap(assetCategory.getTitleMap()),
+          JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE.equals(
+                  assetVocabulary.getExternalReferenceCode())
+              ? JodCategoryType.TAG
+              : JodCategoryType.CATEGORY);
+
     } catch (PortalException portalException) {
       return null;
     }
