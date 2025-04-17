@@ -36,6 +36,30 @@ jobs:
           path: |
             build/docker/*
 
+  upgrade_check:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      upgrade_required: ${{ steps.diff.outputs.upgrade_required }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse gradle.properties
+        id: parse
+        run: |
+          IMAGE=$(grep '^liferay.workspace.docker.image.liferay=' gradle.properties | cut -d'=' -f2 | xargs)
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Compare images and decide
+        id: diff
+        run: |
+          if [ "${{ steps.parse.outputs.image }}" != "${{ vars.JOD_LIFERAY_DOCKER_IMAGE }}" ]; then
+            echo "upgrade_required=true" >> $GITHUB_OUTPUT
+          else
+            echo "upgrade_required=false" >> $GITHUB_OUTPUT
+          fi
+
   package:
     needs: build
     permissions:
@@ -94,9 +118,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+
   deploy-dev:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    needs: package
+    if: (github.ref == 'refs/heads/main'  || github.event_name == 'workflow_dispatch') && needs.upgrade_check.outputs.upgrade_required == 'false'
+    needs:
+      - package
+      - upgrade_check
     uses: ./.github/workflows/deploy.yml
     permissions:
       id-token: write
@@ -106,10 +133,11 @@ jobs:
       tag: ${{ needs.package.outputs.tag }}
 
   deploy-test:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.upgrade_check.outputs.upgrade_required == 'false'
     needs:
       - package
       - deploy-dev
+      - upgrade_check
     uses: ./.github/workflows/deploy.yml
     permissions:
       id-token: write

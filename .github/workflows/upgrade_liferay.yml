@@ -1,20 +1,10 @@
-name: deploy
+name: upgrade_liferay
 on:
-  workflow_call:
-    inputs:
-      environment:
-        type: string
-        description: 'Environment to deploy to'
-        required: true
-      tag:
-        type: string
-        description: 'Image tag to deploy'
-        required: true
   workflow_dispatch:
     inputs:
       environment:
         type: choice
-        description: 'Environment to deploy to'
+        description: 'Environment to upgrade'
         required: true
         default: 'dev'
         options:
@@ -26,18 +16,35 @@ on:
         required: true
 
 jobs:
-  deploy:
+  upgrade:
     permissions:
       id-token: write
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     concurrency:
-      group: deploy-${{ inputs.environment }}
+      group: upgrade-${{ inputs.environment }}
+
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.JOD_AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-west-1
+
+      - name: Take Aurora snapshot
+        id: snapshot
+        run: |
+          TS=$(date +%Y%m%d-%H%M%S)
+          SNAPSHOT_ID="${{ secrets.JOD_DB_CLUSTER_IDENTIFIER }}-snapshot-$TS"
+          echo "Creating snapshot $SNAPSHOT_ID"
+          aws rds create-db-cluster-snapshot \
+            --db-cluster-identifier "${{ secrets.JOD_DB_CLUSTER_IDENTIFIER }}" \
+            --db-cluster-snapshot-identifier "$SNAPSHOT_ID"
+          echo "snapshot_id=$SNAPSHOT_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for snapshot to be ready
+        run: |
+          aws rds wait db-cluster-snapshot-available \
+            --db-cluster-snapshot-identifier ${{ steps.snapshot.outputs.snapshot_id }}
 
       - name: Download task definition
         run: >
@@ -63,7 +70,28 @@ jobs:
           task-definition: task-definition.json
           container-name: ${{ vars.JOD_ECS_APP_CONTAINER }}
           image: ${{ secrets.JOD_ECR }}/oph/jod-ohjaaja-cms:${{ inputs.tag }}
-          environment-variables: "LIFERAY_UPGRADE_PERIOD_DATABASE_PERIOD_AUTO_PERIOD_RUN=false"
+          environment-variables: "LIFERAY_UPGRADE_PERIOD_DATABASE_PERIOD_AUTO_PERIOD_RUN=true"
+
+      - name: Scale ECS down
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+            --service ${{ secrets.JOD_ECS_SERVICE }} \
+            --desired-count 0
+
+      - name: Wait until tasks are stopped
+        timeout-minutes: 10
+        run: |
+          while true; do
+            COUNT=$(aws ecs list-tasks \
+              --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+              --service-name ${{ secrets.JOD_ECS_SERVICE }} \
+              --desired-status RUNNING \
+              --query "taskArns" --output text | wc -w)
+            echo "Running tasks: $COUNT"
+            [ "$COUNT" -eq 0 ] && break
+            sleep 10
+          done
 
       - name: Deploy ECS Service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -72,7 +100,6 @@ jobs:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
           service: ${{ secrets.JOD_ECS_SERVICE }}
           cluster: ${{ secrets.JOD_ECS_CLUSTER }}
-          wait-for-service-stability: true
 
       - name: Ensure that deploy worked
         run: |
@@ -89,3 +116,19 @@ jobs:
         run: >
           aws ssm put-parameter --overwrite --type String
           --name ${{ vars.JOD_IMAGE_TAG_PARAM }} --value "${TAG##*:}"
+
+      - name: Scale ECS up
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+            --service ${{ secrets.JOD_ECS_SERVICE }} \
+            --desired-count 1
+
+      - name: Wait until ECS service is stable
+        timeout-minutes: 10
+        run: |
+          aws ecs wait services-stable \
+          --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+          --services ${{ secrets.JOD_ECS_SERVICE }}
+
+          echo "✅ Service is now stable and running updated tasks"
