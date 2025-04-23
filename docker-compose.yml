@@ -23,7 +23,7 @@ services:
       - default
 
   liferay:
-    image: jod-ohjaaja-cms-liferay:7.4.3.129-ga129
+    image: jod-ohjaaja-cms-liferay:7.4.3.132-ga132
     container_name: liferay1
     ports:
       - "8080:8080"
