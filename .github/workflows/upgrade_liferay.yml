@@ -100,6 +100,8 @@ jobs:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
           service: ${{ secrets.JOD_ECS_SERVICE }}
           cluster: ${{ secrets.JOD_ECS_CLUSTER }}
+          desired-count: 1
+          wait-for-service-stability: true
 
       - name: Ensure that deploy worked
         run: |
@@ -117,18 +119,3 @@ jobs:
           aws ssm put-parameter --overwrite --type String
           --name ${{ vars.JOD_IMAGE_TAG_PARAM }} --value "${TAG##*:}"
 
-      - name: Scale ECS up
-        run: |
-          aws ecs update-service \
-            --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
-            --service ${{ secrets.JOD_ECS_SERVICE }} \
-            --desired-count 1
-
-      - name: Wait until ECS service is stable
-        timeout-minutes: 10
-        run: |
-          aws ecs wait services-stable \
-          --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
-          --services ${{ secrets.JOD_ECS_SERVICE }}
-
-          echo "✅ Service is now stable and running updated tasks"
