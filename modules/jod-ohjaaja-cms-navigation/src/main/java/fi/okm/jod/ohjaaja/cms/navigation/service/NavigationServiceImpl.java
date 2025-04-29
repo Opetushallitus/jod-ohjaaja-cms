@@ -133,11 +133,15 @@ public class NavigationServiceImpl implements NavigationService {
     var journalArticle = getJournalArticle(type, unicodeProperties);
     var name = getName(assetCategory, journalArticle, type, unicodeProperties, languageId);
     var nameI18n = getNameI18n(assetCategory, journalArticle, type);
+    var description = getDescription(assetCategory, journalArticle, type, languageId);
+    var descriptionI18n = getDescriptionI18n(assetCategory, journalArticle, type);
 
     return new NavigationItemDto(
         siteNavigationMenuItem.getSiteNavigationMenuItemId(),
         name,
         nameI18n,
+        description,
+        descriptionI18n,
         getType(siteNavigationMenuItem, type),
         (journalArticle != null) ? journalArticle.getResourcePrimKey() : null,
         (assetCategory != null) ? assetCategory.getCategoryId() : null,
@@ -219,10 +223,35 @@ public class NavigationServiceImpl implements NavigationService {
 
     return switch (type) {
       case ASSET_CATEGORY ->
-          (category != null) ? LocalizedMapUtil.getI18nMap(category.getTitleMap()) : null;
+          (category != null) ? LocalizedMapUtil.getI18nMap(category.getTitleMap()) : Map.of();
       case JOURNAL_ARTICLE ->
-          (article != null) ? LocalizedMapUtil.getI18nMap(article.getTitleMap()) : null;
-      default -> null;
+          (article != null) ? LocalizedMapUtil.getI18nMap(article.getTitleMap()) : Map.of();
+      default -> Map.of();
+    };
+  }
+
+  private String getDescription(
+      AssetCategory category,
+      JournalArticle article,
+      SiteNavigationMenuItemType type,
+      String languageId) {
+
+    return switch (type) {
+      case ASSET_CATEGORY -> (category != null) ? category.getDescription(languageId) : "";
+      case JOURNAL_ARTICLE -> (article != null) ? article.getDescription(languageId) : "";
+      default -> "";
+    };
+  }
+
+  private Map<String, String> getDescriptionI18n(
+      AssetCategory category, JournalArticle article, SiteNavigationMenuItemType type) {
+
+    return switch (type) {
+      case ASSET_CATEGORY ->
+          (category != null) ? LocalizedMapUtil.getI18nMap(category.getDescriptionMap()) : Map.of();
+      case JOURNAL_ARTICLE ->
+          (article != null) ? LocalizedMapUtil.getI18nMap(article.getDescriptionMap()) : Map.of();
+      default -> Map.of();
     };
   }
 

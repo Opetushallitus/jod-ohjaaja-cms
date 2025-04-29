@@ -17,6 +17,8 @@ public record NavigationItemDto(
     @NotNull Long id,
     @NotNull String name,
     @NotNull Map<String, String> name_i18n,
+    @NotNull String description,
+    @NotNull Map<String, String> description_i18n,
     @NotNull String type,
     Long articleId,
     Long categoryId,
