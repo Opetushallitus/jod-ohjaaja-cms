@@ -1,0 +1,7 @@
+Bundle-Name: jod-ohjaaja-cms-study-program-importer
+Bundle-SymbolicName: fi.okm.jod.ohjaaja.cms.studyprogram.importer
+Bundle-Version: 1.0.0
+Web-ContextPath: /jod-ohjaaja-cms-study-program-importer
+Provide-Capability:\
+	liferay.language.resources;\
+		resource.bundle.base.name="content.Language"

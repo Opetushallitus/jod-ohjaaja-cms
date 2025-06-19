@@ -20,10 +20,14 @@ import com.liferay.journal.service.JournalArticleService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.security.permission.ResourceActionsUtil;
+import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.UnicodeProperties;
@@ -32,11 +36,13 @@ import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalSe
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.site.navigation.model.SiteNavigationMenu;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
-import com.liferay.site.navigation.service.SiteNavigationMenuItemService;
+import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
 import com.liferay.site.navigation.service.SiteNavigationMenuService;
 import com.liferay.site.navigation.util.comparator.SiteNavigationMenuItemOrderComparator;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationItemDto;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication;
 import java.util.Collections;
 import java.util.List;
@@ -48,6 +54,8 @@ import org.osgi.service.component.annotations.Reference;
 
 @Component(immediate = true, service = NavigationService.class)
 public class NavigationServiceImpl implements NavigationService {
+
+  private static final Long GROUP_ID = 20117L; // JOD OHJAAJA group ID
 
   private static final String ASSET_CATEGORY_CLASS_NAME =
       "com.liferay.asset.kernel.model.AssetCategory";
@@ -61,24 +69,20 @@ public class NavigationServiceImpl implements NavigationService {
 
   private static final String CUSTOM_FIELD_NAME = "Type";
   private static final String[] CUSTOM_FIELD_DEFAULT_DATA =
-      new String[] {"Article", "CategoryListing", "CategoryMain"};
+      new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"};
 
   private static final Log log = LogFactoryUtil.getLog(NavigationServiceImpl.class);
 
-  @Reference private SiteNavigationMenuItemService siteNavigationMenuItemService;
-
+  @Reference private SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
   @Reference private SiteNavigationMenuService siteNavigationMenuService;
-
   @Reference private AssetCategoryService assetCategoryService;
-
   @Reference private JournalArticleService journalArticleService;
-
   @Reference private JournalArticleResourceLocalService journalArticleResourceLocalService;
-
   @Reference private SAPEntryLocalService sapEntryLocalService;
 
+  @Override
   public NavigationDto getNavigation(Long siteId, String languageId) {
-    var siteNavigationMenus = siteNavigationMenuService.getSiteNavigationMenus(20117);
+    var siteNavigationMenus = siteNavigationMenuService.getSiteNavigationMenus(GROUP_ID);
 
     if (!siteNavigationMenus.isEmpty()) {
       return toNavigationDto(siteNavigationMenus.getFirst(), languageId);
@@ -97,10 +101,86 @@ public class NavigationServiceImpl implements NavigationService {
     initCustomField();
   }
 
+  @Override
+  public void addOrUpdateStudyProgramNavigationMenuItem(
+      JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
+      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection {
+    var studyProgramsParentMenuItem = getStudyProgramsParentMenuItem();
+
+    try {
+      siteNavigationMenuItemLocalService.addOrUpdateSiteNavigationMenuItem(
+          studyProgramJournalArticle.getExternalReferenceCode(),
+          serviceContext.getUserId(),
+          GROUP_ID,
+          studyProgramsParentMenuItem.getSiteNavigationMenuId(),
+          studyProgramsParentMenuItem.getSiteNavigationMenuItemId(),
+          JournalArticle.class.getName(),
+          UnicodePropertiesBuilder.create(true)
+              .put("classNameId", String.valueOf(PortalUtil.getClassNameId(JournalArticle.class)))
+              .put("classPK", String.valueOf(studyProgramJournalArticle.getResourcePrimKey()))
+              .put("classTypeId", String.valueOf(studyProgramJournalArticle.getDDMStructureId()))
+              .put("title", String.valueOf(studyProgramJournalArticle.getTitle()))
+              .put(
+                  "type",
+                  ResourceActionsUtil.getModelResource(
+                      LocaleUtil.getDefault(), JournalArticle.class.getName()))
+              .put("useCustomName", false)
+              .buildString(),
+          serviceContext);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteStudyProgramNavigationMenuItem(String externalReferenceCode)
+      throws PortalException {
+
+    siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(
+        externalReferenceCode, GROUP_ID);
+  }
+
+  public SiteNavigationMenuItem getStudyProgramsParentMenuItem()
+      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection {
+    var siteNavigationMenus = siteNavigationMenuService.getSiteNavigationMenus(GROUP_ID);
+    if (siteNavigationMenus.isEmpty()) {
+      throw new StudyProgramListingMissingException("No site navigation menus found");
+    }
+    var siteNavigationMenu = siteNavigationMenus.getFirst();
+    var menuItems =
+        siteNavigationMenuItemLocalService.getSiteNavigationMenuItems(
+            siteNavigationMenu.getSiteNavigationMenuId(),
+            SiteNavigationMenuItemOrderComparator.getInstance(true));
+
+    var studyProgramsListingMenuItems =
+        menuItems.stream()
+            .filter(menuItem -> "StudyProgramsListing".equals(getCustomFieldValue(menuItem)))
+            .toList();
+    if (studyProgramsListingMenuItems.isEmpty()) {
+      throw new StudyProgramListingMissingException(
+          "No StudyProgramsListing parent menu item found");
+    } else if (studyProgramsListingMenuItems.size() > 1) {
+      throw new MultipleStudyProgramListingMenuItemExpection(
+          "Multiple StudyProgramsListing parent menu item found");
+    }
+    return studyProgramsListingMenuItems.getFirst();
+  }
+
+  private String getCustomFieldValue(SiteNavigationMenuItem siteNavigationMenuItem) {
+    var expandoBridge = siteNavigationMenuItem.getExpandoBridge();
+    var attributes = expandoBridge.getAttributes(false);
+    if (attributes.containsKey(CUSTOM_FIELD_NAME)
+        && attributes.get(CUSTOM_FIELD_NAME) instanceof String[] customFieldData
+        && customFieldData.length > 0) {
+      return customFieldData[0];
+    }
+    return null;
+  }
+
   private NavigationDto toNavigationDto(SiteNavigationMenu siteNavigationMenu, String languageId) {
     var siteNavigationMenuItemsMap =
         getSiteNavigationMenuItemsMap(
-            siteNavigationMenuItemService.getSiteNavigationMenuItems(
+            siteNavigationMenuItemLocalService.getSiteNavigationMenuItems(
                 siteNavigationMenu.getSiteNavigationMenuId(),
                 SiteNavigationMenuItemOrderComparator.getInstance(true)));
 
@@ -291,9 +371,18 @@ public class NavigationServiceImpl implements NavigationService {
 
   private void initCustomField() {
     try {
-      var checker =
-          PermissionCheckerFactoryUtil.create(
-              GuestOrUserUtil.getGuestOrUser(PortalUtil.getDefaultCompanyId()));
+      var role =
+          RoleLocalServiceUtil.fetchRole(
+              PortalUtil.getDefaultCompanyId(), RoleConstants.ADMINISTRATOR);
+      var adminUsers = UserLocalServiceUtil.getRoleUsers(role.getRoleId(), 0, 1);
+      if (adminUsers.isEmpty()) {
+        log.warn("No admin users found, using guest user for permission checker");
+      }
+      var user =
+          adminUsers.isEmpty()
+              ? UserLocalServiceUtil.getGuestUser(PortalUtil.getDefaultCompanyId())
+              : adminUsers.getFirst();
+      var checker = PermissionCheckerFactoryUtil.create(user);
       PermissionThreadLocal.setPermissionChecker(checker);
       var expandoBridge =
           ExpandoBridgeFactoryUtil.getExpandoBridge(
@@ -301,6 +390,7 @@ public class NavigationServiceImpl implements NavigationService {
 
       if (expandoBridge.getAttributes().containsKey(CUSTOM_FIELD_NAME)) {
         log.info("Custom field already exists");
+        expandoBridge.setAttributeDefault(CUSTOM_FIELD_NAME, CUSTOM_FIELD_DEFAULT_DATA);
       } else {
         expandoBridge.addAttribute(
             CUSTOM_FIELD_NAME,

@@ -9,9 +9,24 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.service;
 
+import com.liferay.journal.model.JournalArticle;
+import com.liferay.portal.kernel.exception.PortalException;
+import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 
 public interface NavigationService {
+  void addOrUpdateStudyProgramNavigationMenuItem(
+      JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
+      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection;
+
+  void deleteStudyProgramNavigationMenuItem(String externalReferenceCode) throws PortalException;
+
+  SiteNavigationMenuItem getStudyProgramsParentMenuItem()
+      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection;
+
   NavigationDto getNavigation(Long siteId, String languageId);
 
   void initNavigation();
