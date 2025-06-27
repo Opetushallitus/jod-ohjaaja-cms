@@ -16,6 +16,7 @@ import com.liferay.portal.kernel.service.ServiceContext;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.BaseStudyProgramBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.DeleteImportedStudyProgramsBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
+import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -26,12 +27,11 @@ import org.osgi.service.component.annotations.Component;
 public class StudyProgramBackgroundTaskService {
   private static final String IMPORT_TASK_NAME = "study-program-import";
   private static final String DELETE_TASK_NAME = "study-program-delete";
-  private static final long GROUP_ID = 20117;
 
-  public boolean isAnyImportOrDeleteTaskRunning() throws PortalException {
+  public boolean isAnyImportOrDeleteTaskRunning() {
     var tasks =
         BackgroundTaskManagerUtil.getBackgroundTasks(
-            GROUP_ID,
+            StudyProgramImporterConstants.JOD_GROUP_ID,
             new String[] {
               ImportStudyProgramsBackgroundTaskExecutor.class.getName(),
               DeleteImportedStudyProgramsBackgroundTaskExecutor.class.getName()
@@ -65,13 +65,18 @@ public class StudyProgramBackgroundTaskService {
     }
 
     ServiceContext serviceContext = new ServiceContext();
-    serviceContext.setScopeGroupId(GROUP_ID);
+    serviceContext.setScopeGroupId(StudyProgramImporterConstants.JOD_GROUP_ID);
     serviceContext.setUserId(userId);
 
     var taskContextMap = new HashMap<String, Serializable>();
     taskContextMap.put("errors", new ArrayList<String>());
 
     return BackgroundTaskManagerUtil.addBackgroundTask(
-        userId, GROUP_ID, taskName, executorClass.getName(), taskContextMap, serviceContext);
+        userId,
+        StudyProgramImporterConstants.JOD_GROUP_ID,
+        taskName,
+        executorClass.getName(),
+        taskContextMap,
+        serviceContext);
   }
 }
