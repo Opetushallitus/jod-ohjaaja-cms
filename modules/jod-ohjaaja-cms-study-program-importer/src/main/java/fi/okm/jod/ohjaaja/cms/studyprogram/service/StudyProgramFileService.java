@@ -54,6 +54,8 @@ public class StudyProgramFileService {
       var serviceContext = new ServiceContext();
       serviceContext.setScopeGroupId(JOD_GROUP_ID);
       serviceContext.setUserId(userId);
+      serviceContext.setAddGuestPermissions(true);
+      serviceContext.setAddGuestPermissions(true);
 
       FileEntry fileEntry = null;
       try {
@@ -148,6 +150,8 @@ public class StudyProgramFileService {
     } catch (PortalException e) {
       var ctx = new ServiceContext();
       ctx.setScopeGroupId(JOD_GROUP_ID);
+      ctx.setAddGuestPermissions(true);
+      ctx.setAddGroupPermissions(true);
       var folder =
           dlAppLocalService.addFolder(
               StringUtil.randomString(),

@@ -15,9 +15,32 @@ import java.util.Locale;
 public class StudyProgramImporterConstants {
   public static final String EXTERNAL_REFERENCE_CODE = "ohjaaja-study-program";
   public static final long JOD_GROUP_ID = 20117;
+  public static final String STUDY_PROGRAM_TAG_CATEGORY_EXTERNAL_REFERENCE_CODE =
+      "ohjaaja-study-program-tag-category";
+  public static final String STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE = "Koulutus";
+  public static final String STUDY_PROGRAM_TAG_CATEGORY_SWEDISH_TITLE = "Utbildning";
+  public static final String STUDY_PROGRAM_TAG_CATEGORY_ENGLISH_TITLE = "Education";
+  public static final String STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE =
+      "ohjaaja-study-program-category-vocabulary";
+  public static final String STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE = "Kategoria";
+  public static final String STUDY_PROGRAM_CATEGORY_VOCABULARY_SWEDISH_TITLE = "Kategori";
+  public static final String STUDY_PROGRAM_CATEGORY_VOCABULARY_ENGLISH_TITLE = "Category";
   public static final Locale FINNISH = LocaleUtil.fromLanguageId("fi_FI");
   public static final Locale ENGLISH = LocaleUtil.fromLanguageId("en_US");
   public static final Locale SWEDISH = LocaleUtil.fromLanguageId("sv_SE");
   public static final String IMAGE_FOLDER_NAME = "koulutustarjonta-kuvat";
   public static final String IMAGE_FOLDER_DESCRIPTION = "Kuvat koulutustarjonnan artikkeleihin";
+  public static final String STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE =
+      "ohjaaja-study-program-parent-category";
+  public static final String STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE =
+      "Ammatillinen kehittyminen";
+  public static final String STUDY_PROGRAM_PARENT_CATEGORY_SWEDISH_TITLE =
+      "Professionell utveckling";
+  public static final String STUDY_PROGRAM_PARENT_CATEGORY_ENGLISH_TITLE =
+      "Professional development";
+  public static final String STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE =
+      "ohjaaja-study-program-category";
+  public static final String STUDY_PROGRAM_CATEGORY_FINNISH_TITLE = "Ohjausalan koulutukset";
+  public static final String STUDY_PROGRAM_CATEGORY_SWEDISH_TITLE = "Utbildningar inom vägledning";
+  public static final String STUDY_PROGRAM_CATEGORY_ENGLISH_TITLE = "Guidance field training";
 }
