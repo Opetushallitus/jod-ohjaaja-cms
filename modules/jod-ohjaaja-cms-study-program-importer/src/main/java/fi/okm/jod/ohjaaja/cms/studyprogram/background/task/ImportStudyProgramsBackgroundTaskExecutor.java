@@ -30,11 +30,13 @@ import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.util.HtmlUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.Validator;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.dto.StudyProgramDto;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
@@ -61,6 +63,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
   @Reference private StudyProgramService studyProgramImporter;
   @Reference private StudyProgramFileService studyProgramFileService;
   @Reference private StudyProgramStructureService studyProgramStructureService;
+  @Reference private StudyProgramCategoryService studyProgramCategoryService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
   @Reference private NavigationService navigationService;
 
@@ -200,11 +203,16 @@ public class ImportStudyProgramsBackgroundTaskExecutor
                 serviceContext);
       }
       navigationService.addOrUpdateStudyProgramNavigationMenuItem(journalArticle, serviceContext);
+      studyProgramCategoryService.setJournalArticleCategories(journalArticle);
     } catch (Exception e) {
       log.error("Failed to import study program: " + studyProgram.oid(), e);
       reportError(
           task, "Failed to import study program: " + studyProgram.oid() + " - " + e.getMessage());
     }
+  }
+
+  private String extractIngress(String text) {
+    return HtmlUtil.stripHtml(text).split("\\.")[0].trim() + ".";
   }
 
   private String getContent(DDMStructure structure, StudyProgramDto studyProgram) throws Exception {
@@ -215,28 +223,28 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
     formValues.addDDMFormFieldValue(
         createFieldValue(
-            "StudyProgramIngress",
+            "ingress",
             Map.of(
-                FINNISH, studyProgram.getKuvaus("fi"),
-                ENGLISH, studyProgram.getKuvaus("en"),
-                SWEDISH, studyProgram.getKuvaus("sv"))));
+                FINNISH, extractIngress(studyProgram.getKuvaus("fi")),
+                ENGLISH, extractIngress(studyProgram.getKuvaus("en")),
+                SWEDISH, extractIngress(studyProgram.getKuvaus("sv")))));
 
     if (Validator.isNotNull(studyProgram.teemakuva())) {
       var imageUrl = studyProgram.teemakuva();
       var json = studyProgramFileService.getImageJSON(imageUrl, studyProgram.oid());
       if (json != null) {
-        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("StudyProgramImage", json));
+        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", json));
       } else {
         log.warn("Image import failed " + studyProgram.teemakuva());
-        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("StudyProgramImage", ""));
+        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
       }
     } else {
-      formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("StudyProgramImage", ""));
+      formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
     }
 
     formValues.addDDMFormFieldValue(
         createFieldValue(
-            "StudyProgramContent",
+            "content",
             Map.of(
                 FINNISH, studyProgram.getKuvaus("fi"),
                 ENGLISH, studyProgram.getKuvaus("en"),

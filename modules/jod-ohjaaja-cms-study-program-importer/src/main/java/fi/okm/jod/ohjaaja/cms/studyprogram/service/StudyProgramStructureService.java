@@ -133,9 +133,9 @@ public class StudyProgramStructureService {
     var row2 = new DDMFormLayoutRow();
     var row3 = new DDMFormLayoutRow();
 
-    row1.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "StudyProgramIngress"));
-    row2.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "StudyProgramContent"));
-    row3.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "StudyProgramImage"));
+    row1.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "ingress"));
+    row2.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "content"));
+    row3.addDDMFormLayoutColumn(new DDMFormLayoutColumn(12, "image"));
 
     page.addDDMFormLayoutRow(row1);
     page.addDDMFormLayoutRow(row2);
@@ -143,23 +143,20 @@ public class StudyProgramStructureService {
 
     layout.addDDMFormLayoutPage(page);
 
-    var structure =
-        ddmStructureLocalService.addStructure(
-            EXTERNAL_REFERENCE_CODE,
-            user.getUserId(),
-            JOD_GROUP_ID,
-            0,
-            classNameId,
-            EXTERNAL_REFERENCE_CODE,
-            nameMap,
-            descriptionMap,
-            buildDDMForm(defaultLocale),
-            layout,
-            StorageType.DEFAULT.toString(),
-            DDMStructureConstants.TYPE_DEFAULT,
-            serviceContext);
-
-    return structure;
+    return ddmStructureLocalService.addStructure(
+        EXTERNAL_REFERENCE_CODE,
+        user.getUserId(),
+        JOD_GROUP_ID,
+        0,
+        classNameId,
+        EXTERNAL_REFERENCE_CODE,
+        nameMap,
+        descriptionMap,
+        buildDDMForm(defaultLocale),
+        layout,
+        StorageType.DEFAULT.toString(),
+        DDMStructureConstants.TYPE_DEFAULT,
+        serviceContext);
   }
 
   private DDMForm buildDDMForm(Locale locale) {
@@ -167,11 +164,9 @@ public class StudyProgramStructureService {
     form.setAvailableLocales(Set.of(locale));
     form.setDefaultLocale(locale);
 
-    form.addDDMFormField(
-        createField("StudyProgramIngress", "text", "string", false, "Ingressi", locale));
-    form.addDDMFormField(createField("StudyProgramImage", "image", "image", false, "Kuva", locale));
-    form.addDDMFormField(
-        createField("StudyProgramContent", "rich_text", "html", true, "Sisältö", locale));
+    form.addDDMFormField(createField("ingress", "text", "string", false, "Ingressi", locale));
+    form.addDDMFormField(createField("image", "image", "image", false, "Kuva", locale));
+    form.addDDMFormField(createField("content", "rich_text", "html", true, "Sisältö", locale));
 
     return form;
   }

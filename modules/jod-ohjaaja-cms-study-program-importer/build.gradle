@@ -4,6 +4,7 @@ plugins {
 dependencies {
 	compileOnly group: "com.liferay.portal", name: "release.portal.api"
   compileOnly project(":modules:jod-ohjaaja-cms-navigation")
+  compileOnly project(":modules:jod-ohjaaja-cms-tags")
 }
 spotless {
   java {

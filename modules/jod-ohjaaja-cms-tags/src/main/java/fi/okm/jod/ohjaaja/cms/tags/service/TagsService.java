@@ -11,7 +11,15 @@ package fi.okm.jod.ohjaaja.cms.tags.service;
 
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import java.util.List;
+import java.util.Map;
 
 public interface TagsService {
   List<JodTaxonomyCategoryDto> getJodTaxonomyCategories(Long siteId);
+
+  void addOrUpdateJodTaxonomyCategory(
+      Long categoryId,
+      String externalReferenceCode,
+      String name,
+      Map<String, String> name_i18n,
+      Long siteId);
 }

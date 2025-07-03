@@ -98,6 +98,7 @@ public class JodOhjaajaCmsTagsDtoConverter
 
       return new JodTaxonomyCategoryDto(
           assetCategory.getCategoryId(),
+          assetCategory.getExternalReferenceCode(),
           assetCategory.getName(),
           LocalizedMapUtil.getI18nMap(assetCategory.getTitleMap()),
           JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE.equals(

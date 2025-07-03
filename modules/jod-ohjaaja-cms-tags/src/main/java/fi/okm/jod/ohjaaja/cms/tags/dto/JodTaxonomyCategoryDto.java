@@ -14,6 +14,7 @@ import javax.validation.constraints.NotNull;
 
 public record JodTaxonomyCategoryDto(
     @NotNull Long id,
+    String externalReferenceCode,
     @NotNull String name,
     @NotNull Map<String, String> name_i18n,
     @NotNull JodCategoryType type) {}
