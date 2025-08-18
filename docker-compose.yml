@@ -41,6 +41,8 @@ services:
       - ./build/docker/deploy:/mnt/liferay/deploy
     networks:
       - default
+    extra_hosts:
+      - "host.docker.internal:172.17.0.1"
 volumes:
   pgdata:
     driver: local

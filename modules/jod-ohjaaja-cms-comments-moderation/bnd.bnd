@@ -1,0 +1,8 @@
+Bundle-Name: jod-ohjaaja-cms-comments-moderation
+Bundle-SymbolicName: fi.okm.jod.ohjaaja.cms.comments.moderation
+Bundle-Version: 1.0.0
+Web-ContextPath: /jod-ohjaaja-cms-comments-moderation
+Provide-Capability: \
+  	liferay.language.resources;\
+  		resource.bundle.base.name="content.Language"
+-fixupmessages "Classes found in the wrong directory"; restrict: =error; is:=warning
