@@ -13,10 +13,12 @@ import com.liferay.portal.kernel.portlet.bridges.mvc.MVCPortlet;
 import com.liferay.portal.kernel.servlet.SessionErrors;
 import com.liferay.portal.kernel.servlet.SessionMessages;
 import com.liferay.portal.kernel.util.ParamUtil;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.client.Feature;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.constants.CommentsModerationPortletKeys;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.service.CommentsModerationService;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.service.FeatureFlagsService;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -49,6 +51,7 @@ import org.osgi.service.component.annotations.Reference;
 public class CommentsModerationPortlet extends MVCPortlet {
 
   @Reference private CommentsModerationService commentsModerationService;
+  @Reference private FeatureFlagsService featureFlagsService;
 
   @Override
   public void doView(RenderRequest renderRequest, RenderResponse renderResponse)
@@ -57,6 +60,8 @@ public class CommentsModerationPortlet extends MVCPortlet {
       renderRequest.setAttribute(
           "commentReportSummaries",
           commentsModerationService.getCommentReportSummaries(renderRequest));
+      renderRequest.setAttribute(
+          "commentsEnabled", featureFlagsService.isFeatureEnabled(renderRequest, Feature.COMMENTS));
     } catch (ModerationApiException e) {
       SessionErrors.add(renderRequest, "error.fetching.comment.reports");
       renderRequest.setAttribute(
@@ -84,5 +89,12 @@ public class CommentsModerationPortlet extends MVCPortlet {
     } catch (ModerationApiException e) {
       SessionErrors.add(actionRequest, "error.deleting.comment.reports");
     }
+  }
+
+  public void setCommentsFeatureFlag(ActionRequest actionRequest, ActionResponse actionResponse) {
+    boolean enabled = ParamUtil.getBoolean(actionRequest, "enabled");
+    featureFlagsService.updateFeatureFlag(actionRequest, Feature.COMMENTS, enabled);
+    SessionMessages.add(
+        actionRequest, enabled ? "success.comments.enabled" : "success.comments.disabled");
   }
 }
