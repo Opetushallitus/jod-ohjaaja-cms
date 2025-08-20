@@ -3,6 +3,7 @@
 <%@ page import="com.liferay.portal.kernel.util.DateFormatFactoryUtil" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto" %>
 <%@ page import="javax.portlet.PortletRequest" %>
+<%@ page import="java.lang.Boolean" %>
 <%@ page import="java.sql.Date" %>
 <%@ page import="java.text.DateFormat" %>
 <%@ page import="java.util.List" %>
@@ -19,7 +20,9 @@
           .map(CommentReportSummaryDto.class::cast)
           .toList())
       .orElse(List.of());
+  boolean commentsEnabled = Boolean.TRUE.equals(request.getAttribute("commentsEnabled"));
   PortletRequest portletRequest = (PortletRequest) request.getAttribute("javax.portlet.request");
+
   Locale userLocale = themeDisplay.getLocale();
   DateFormat dateFormat = DateFormatFactoryUtil.getDateTime(userLocale, timeZone);
 %>
@@ -27,6 +30,25 @@
   <h2>
     <liferay-ui:message key="page.title"/>
   </h2>
+  <p>
+    <% if (commentsEnabled) { %>
+    <liferay-ui:message key="comments.enabled"/>
+    <% } else { %>
+    <liferay-ui:message key="comments.disabled"/>
+    <% } %>
+    <portlet:actionURL name="setCommentsFeatureFlag" var="toggleCommentsFeatureFlagURL">
+      <portlet:param name="enabled" value="<%=Boolean.toString(!commentsEnabled)%>"/>
+    </portlet:actionURL>
+    <aui:button
+        value='<%= commentsEnabled ? themeDisplay.translate("button.disable.comments") : themeDisplay.translate("button.enable.comments") %>'
+        data-url="${toggleCommentsFeatureFlagURL}"
+        data-msg='<%= commentsEnabled ? themeDisplay.translate("confirm.disable.comments") : themeDisplay.translate("confirm.enable.comments")%>'
+        onClick="return handleConfirmationRequiringButtonClick(this);"
+        cssClass="btn btn-sm"/>
+  </p>
+
+
+
   <p>
     <liferay-ui:message key="page.description"/>
   </p>
@@ -99,14 +121,14 @@
                 value='<%= themeDisplay.translate("button.delete.comment")%>'
                 data-url="${deleteCommentURL}"
                 data-msg='<%= themeDisplay.translate("confirm.delete.comment\")%>'
-                onClick="return handleDelete(this);"
+                onClick="return handleConfirmationRequiringButtonClick(this);"
                 cssClass="btn btn-danger btn-sm"/>
 
             <aui:button
                 value='<%= themeDisplay.translate("button.delete.reports")%>'
                 data-url="${deleteReportURL}"
                 data-msg='<%= themeDisplay.translate("confirm.delete.reports\")%>'
-                onClick="return handleDelete(this);"
+                onClick="return handleConfirmationRequiringButtonClick(this);"
                 cssClass="btn btn-warning btn-sm"/>
           </td>
         </tr>
@@ -118,7 +140,7 @@
 </div>
 
 <script>
-  function handleDelete(button) {
+  function handleConfirmationRequiringButtonClick(button) {
     const url = button.getAttribute('data-url');
     const message = button.getAttribute('data-msg');
     if (confirm(message)) {

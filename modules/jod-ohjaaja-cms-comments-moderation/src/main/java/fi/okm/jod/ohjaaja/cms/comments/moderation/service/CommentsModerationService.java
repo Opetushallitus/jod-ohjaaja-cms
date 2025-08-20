@@ -9,7 +9,8 @@
 
 package fi.okm.jod.ohjaaja.cms.comments.moderation.service;
 
-import com.liferay.portal.kernel.util.PortalUtil;
+import static fi.okm.jod.ohjaaja.cms.comments.moderation.util.TokenUtil.getToken;
+
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.CommentsModerationApiClient;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
@@ -37,9 +38,5 @@ public class CommentsModerationService {
   public void deleteComment(UUID commentId, PortletRequest portletRequest)
       throws ModerationApiException {
     commentsModerationApiClient.deleteComment(commentId, getToken(portletRequest));
-  }
-
-  private String getToken(PortletRequest portletRequest) {
-    return PortalUtil.getHttpServletRequest(portletRequest).getHeader("x-amzn-oidc-accesstoken");
   }
 }
