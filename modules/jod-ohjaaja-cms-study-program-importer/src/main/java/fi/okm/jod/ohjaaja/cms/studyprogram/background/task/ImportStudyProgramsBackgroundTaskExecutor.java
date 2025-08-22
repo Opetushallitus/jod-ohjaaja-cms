@@ -17,11 +17,15 @@ import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporter
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.*;
 
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
+import com.liferay.dynamic.data.mapping.model.LocalizedValue;
+import com.liferay.dynamic.data.mapping.model.UnlocalizedValue;
+import com.liferay.dynamic.data.mapping.storage.DDMFormFieldValue;
 import com.liferay.dynamic.data.mapping.storage.DDMFormValues;
 import com.liferay.dynamic.data.mapping.util.DDM;
 import com.liferay.journal.model.JournalArticleModel;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.journal.util.JournalConverter;
+import com.liferay.petra.string.StringPool;
 import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
 import com.liferay.portal.kernel.backgroundtask.*;
 import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
@@ -41,6 +45,7 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import javax.validation.ValidationException;
@@ -73,7 +78,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
   @Override
   public BackgroundTaskResult execute(BackgroundTask backgroundTask) throws Exception {
-    BackgroundTaskStatus status =
+    var status =
         BackgroundTaskStatusRegistryUtil.getBackgroundTaskStatus(
             backgroundTask.getBackgroundTaskId());
 
@@ -109,7 +114,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
       }
 
       // Optionally check if task is being removed externally
-      com.liferay.portal.background.task.model.BackgroundTask task =
+      var task =
           BackgroundTaskLocalServiceUtil.fetchBackgroundTask(backgroundTask.getBackgroundTaskId());
       if (task == null || task.getStatus() == BackgroundTaskConstants.STATUS_CANCELLED) {
         return BackgroundTaskResult.SUCCESS;
@@ -215,6 +220,39 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     return HtmlUtil.stripHtml(text).split("\\.")[0].trim() + ".";
   }
 
+  private DDMFormFieldValue createLinkFieldsetValue(
+      StudyProgramDto studyProgram, Locale defaultLocale) {
+
+    var fieldset = new DDMFormFieldValue();
+    fieldset.setName("FieldsetLink");
+    fieldset.setValue(new UnlocalizedValue(StringPool.BLANK));
+
+    var linkText = new DDMFormFieldValue();
+    linkText.setName("linktext");
+    var textVal = new LocalizedValue(defaultLocale);
+    var fiName = studyProgram.nimi().getOrDefault("fi", "");
+    var enName = studyProgram.nimi().getOrDefault("en", fiName);
+    var svName = studyProgram.nimi().getOrDefault("sv", fiName);
+    textVal.addString(FINNISH, fiName);
+    textVal.addString(ENGLISH, enName);
+    textVal.addString(SWEDISH, svName);
+    linkText.setValue(textVal);
+
+    var linkUrl = new DDMFormFieldValue();
+    linkUrl.setName("linkurl");
+    var urlVal = new LocalizedValue(defaultLocale);
+    var baseUrl = "https://opintopolku.fi/konfo/";
+    urlVal.addString(FINNISH, baseUrl + "fi/koulutus/" + studyProgram.oid());
+    urlVal.addString(ENGLISH, baseUrl + "en/koulutus/" + studyProgram.oid());
+    urlVal.addString(SWEDISH, baseUrl + "sv/koulutus/" + studyProgram.oid());
+    linkUrl.setValue(urlVal);
+
+    fieldset.addNestedDDMFormFieldValue(linkText);
+    fieldset.addNestedDDMFormFieldValue(linkUrl);
+
+    return fieldset;
+  }
+
   private String getContent(DDMStructure structure, StudyProgramDto studyProgram) throws Exception {
     var ddmForm = structure.getDDMForm();
     var formValues = new DDMFormValues(ddmForm);
@@ -250,6 +288,8 @@ public class ImportStudyProgramsBackgroundTaskExecutor
                 ENGLISH, studyProgram.getKuvaus("en"),
                 SWEDISH, studyProgram.getKuvaus("sv"))));
 
+    formValues.addDDMFormFieldValue(
+        createLinkFieldsetValue(studyProgram, formValues.getDefaultLocale()));
     return journalConverter.getContent(
         structure, ddm.getFields(structure.getStructureId(), formValues), JOD_GROUP_ID);
   }
