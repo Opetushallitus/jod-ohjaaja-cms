@@ -223,6 +223,11 @@ public class NavigationServiceImpl implements NavigationService {
         description,
         descriptionI18n,
         getType(siteNavigationMenuItem, type),
+        assetCategory != null
+            ? assetCategory.getExternalReferenceCode()
+            : (journalArticle != null)
+                ? journalArticle.getExternalReferenceCode()
+                : siteNavigationMenuItem.getExternalReferenceCode(),
         (journalArticle != null) ? journalArticle.getResourcePrimKey() : null,
         (assetCategory != null) ? assetCategory.getCategoryId() : null,
         siteNavigationMenuItemsMap
