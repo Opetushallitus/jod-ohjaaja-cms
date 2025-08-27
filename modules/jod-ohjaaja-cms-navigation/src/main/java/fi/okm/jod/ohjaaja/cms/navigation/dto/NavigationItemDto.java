@@ -20,6 +20,7 @@ public record NavigationItemDto(
     @NotNull String description,
     @NotNull Map<String, String> description_i18n,
     @NotNull String type,
+    @NotNull String externalReferenceCode,
     Long articleId,
     Long categoryId,
     List<NavigationItemDto> children,

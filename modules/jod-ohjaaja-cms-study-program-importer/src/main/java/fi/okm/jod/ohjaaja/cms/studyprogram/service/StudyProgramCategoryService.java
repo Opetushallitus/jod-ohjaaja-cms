@@ -177,6 +177,7 @@ public class StudyProgramCategoryService {
         StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE);
 
     assetVocabularyLocalService.updateAssetVocabulary(studyProgramVocabulary);
+    assetVocabularyLocalService.addVocabularyResources(studyProgramVocabulary, true, true);
 
     var studyProgramCategory = getStudyProgramCategory();
     var studyProgramParentCategory = getStudyProgramParentCategory();
@@ -212,6 +213,7 @@ public class StudyProgramCategoryService {
     studyProgramParentCategory.setExternalReferenceCode(
         StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
     assetCategoryLocalService.updateAssetCategory(studyProgramParentCategory);
+    assetCategoryLocalService.addCategoryResources(studyProgramParentCategory, true, true);
 
     if (studyProgramCategory == null) {
       studyProgramCategory =
@@ -224,6 +226,7 @@ public class StudyProgramCategoryService {
         StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE);
     studyProgramCategory.setParentCategoryId(studyProgramParentCategory.getCategoryId());
     assetCategoryLocalService.updateAssetCategory(studyProgramCategory);
+    assetCategoryLocalService.addCategoryResources(studyProgramCategory, true, true);
   }
 
   private AssetVocabulary createStudyProgramVocabulary() throws PortalException {

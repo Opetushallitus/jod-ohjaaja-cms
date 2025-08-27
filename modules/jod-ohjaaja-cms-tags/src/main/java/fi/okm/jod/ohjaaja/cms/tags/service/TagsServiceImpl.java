@@ -70,17 +70,18 @@ public class TagsServiceImpl implements TagsService {
       var user = GuestOrUserUtil.getGuestOrUser(PortalUtil.getDefaultCompanyId());
       if (categoryId == null) {
         // Create new category
-        assetCategoryLocalService.addCategory(
-            externalReferenceCode,
-            user.getUserId(),
-            siteId,
-            0,
-            LocalizedMapUtil.getLocalizedMap(name_i18n),
-            Map.of(),
-            tagVocabulary.getVocabularyId(),
-            null,
-            new ServiceContext());
-
+        var assetCategory =
+            assetCategoryLocalService.addCategory(
+                externalReferenceCode,
+                user.getUserId(),
+                siteId,
+                0,
+                LocalizedMapUtil.getLocalizedMap(name_i18n),
+                Map.of(),
+                tagVocabulary.getVocabularyId(),
+                null,
+                new ServiceContext());
+        assetCategoryLocalService.addCategoryResources(assetCategory, true, true);
       } else {
         // Update existing category
         var assetCategory = assetCategoryLocalService.getAssetCategory(categoryId);
@@ -88,6 +89,7 @@ public class TagsServiceImpl implements TagsService {
         assetCategory.setName(name);
         assetCategory.setTitleMap(LocalizedMapUtil.getLocalizedMap(name_i18n));
         assetCategoryLocalService.updateAssetCategory(assetCategory);
+        assetCategoryLocalService.addCategoryResources(assetCategory, true, true);
       }
     } catch (PortalException e) {
       throw new RuntimeException("Failed to add or update taxonomy category", e);
