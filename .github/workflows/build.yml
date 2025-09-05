@@ -145,3 +145,17 @@ jobs:
     with:
       environment: test
       tag: ${{ needs.package.outputs.tag }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main' && needs.upgrade_check.outputs.upgrade_required == 'false'
+    needs:
+      - package
+      - deploy-dev
+      - upgrade_check
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+    secrets: inherit
+    with:
+      environment: production
+      tag: ${{ needs.package.outputs.tag }}
