@@ -11,6 +11,8 @@ package fi.okm.jod.ohjaaja.cms.studyprogram.client;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.util.PropsUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.dto.StudyProgramDto;
 import java.io.IOException;
@@ -24,6 +26,8 @@ import org.osgi.service.component.annotations.Component;
 
 @Component(service = KonfoClient.class)
 public class KonfoClient {
+
+  private static final Log log = LogFactoryUtil.getLog(KonfoClient.class);
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
@@ -43,6 +47,7 @@ public class KonfoClient {
 
   public List<StudyProgramDto> fetchStudyPrograms() throws IOException, InterruptedException {
 
+    log.info("Fetching study programs from Konfo API: " + KONFO_API_STUDY_PROGRAMS_URL);
     HttpRequest request =
         HttpRequest.newBuilder()
             .timeout(READ_TIMEOUT)
@@ -55,6 +60,7 @@ public class KonfoClient {
 
     if (response.statusCode() == 200) {
       KonfoResponse searchResponse = objectMapper.readValue(response.body(), KonfoResponse.class);
+      log.info("Got " + searchResponse.hits().size() + " study programs from Konfo API.");
       return searchResponse.hits();
     } else {
       throw new IOException("Failed to fetch study programs: " + response.statusCode());

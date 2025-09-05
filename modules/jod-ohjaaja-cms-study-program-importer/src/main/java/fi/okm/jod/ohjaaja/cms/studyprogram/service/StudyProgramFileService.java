@@ -19,6 +19,7 @@ import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.repository.model.FileEntry;
+import com.liferay.portal.kernel.repository.model.Folder;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.HttpUtil;
 import com.liferay.portal.kernel.util.MimeTypesUtil;
@@ -129,13 +130,18 @@ public class StudyProgramFileService {
   }
 
   public void deleteStudyProgramImageFolder() throws StudyProgramImageFolderDeleteException {
+    Folder folder;
     try {
-      var folder = dlAppLocalService.getFolder(JOD_GROUP_ID, 0, IMAGE_FOLDER_NAME);
+      folder = dlAppLocalService.getFolder(JOD_GROUP_ID, 0, IMAGE_FOLDER_NAME);
+    } catch (PortalException e) {
+      log.error("DL folder not found: " + IMAGE_FOLDER_NAME);
+      return;
+    }
+    try {
       if (folder != null) {
         dlAppLocalService.deleteFolder(folder.getFolderId());
+        log.info("Deleted DL folder: " + IMAGE_FOLDER_NAME);
       }
-
-      log.info("Deleted DL folder: " + IMAGE_FOLDER_NAME);
     } catch (PortalException e) {
       log.error("Failed to delete dl folder: " + IMAGE_FOLDER_NAME, e);
       throw new StudyProgramImageFolderDeleteException(
