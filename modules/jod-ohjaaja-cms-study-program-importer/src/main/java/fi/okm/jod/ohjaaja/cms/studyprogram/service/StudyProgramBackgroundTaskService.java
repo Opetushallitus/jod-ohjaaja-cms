@@ -9,10 +9,16 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
+import com.liferay.portal.kernel.audit.AuditMessage;
+import com.liferay.portal.kernel.audit.AuditRouter;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil;
 import com.liferay.portal.kernel.exception.PortalException;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.service.UserLocalService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.BaseStudyProgramBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.DeleteImportedStudyProgramsBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
@@ -22,11 +28,18 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 
 @Component(service = StudyProgramBackgroundTaskService.class, immediate = true)
 public class StudyProgramBackgroundTaskService {
+
+  private static final Log log = LogFactoryUtil.getLog(StudyProgramBackgroundTaskService.class);
   private static final String IMPORT_TASK_NAME = "study-program-import";
   private static final String DELETE_TASK_NAME = "study-program-delete";
+
+  @Reference private AuditRouter auditRouter;
+
+  @Reference private UserLocalService userLocalService;
 
   public boolean isAnyImportOrDeleteTaskRunning() {
     var tasks =
@@ -63,7 +76,7 @@ public class StudyProgramBackgroundTaskService {
     if (isAnyImportOrDeleteTaskRunning()) {
       throw new IllegalStateException("Another import or delete task is already running");
     }
-
+    audit(taskName, userId);
     ServiceContext serviceContext = new ServiceContext();
     serviceContext.setScopeGroupId(StudyProgramImporterConstants.JOD_GROUP_ID);
     serviceContext.setUserId(userId);
@@ -78,5 +91,16 @@ public class StudyProgramBackgroundTaskService {
         executorClass.getName(),
         taskContextMap,
         serviceContext);
+  }
+
+  private void audit(String action, long userId) {
+    try {
+      User user = userLocalService.getUser(userId);
+      AuditMessage auditMessage =
+          new AuditMessage(action, user.getCompanyId(), user.getUserId(), user.getFullName());
+      auditRouter.route(auditMessage);
+    } catch (PortalException e) {
+      log.error("Audit failed for action " + action + " by user " + userId, e);
+    }
   }
 }
