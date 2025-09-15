@@ -22,6 +22,7 @@ import org.osgi.service.component.annotations.Reference;
 @Component(service = FeatureFlagsService.class)
 public class FeatureFlagsService {
   @Reference private FeaturesApiClient featuresApiClient;
+  @Reference private AuditService auditService;
 
   public List<FeatureFlagDto> getFeatureFlags(PortletRequest portletRequest) {
     return featuresApiClient.getFeatureFlags(getToken(portletRequest));
@@ -38,5 +39,10 @@ public class FeatureFlagsService {
 
   public void updateFeatureFlag(PortletRequest portletRequest, Feature feature, boolean enabled) {
     featuresApiClient.setFeatureFlag(feature, enabled, getToken(portletRequest));
+    var eventType =
+        enabled
+            ? "feature-flag-" + feature.name() + "-enabled"
+            : "feature-flag-" + feature.name() + "-disabled";
+    auditService.audit(eventType, portletRequest);
   }
 }

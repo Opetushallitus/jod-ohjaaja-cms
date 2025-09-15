@@ -24,6 +24,7 @@ import org.osgi.service.component.annotations.Reference;
 public class CommentsModerationService {
 
   @Reference private CommentsModerationApiClient commentsModerationApiClient;
+  @Reference private AuditService auditService;
 
   public List<CommentReportSummaryDto> getCommentReportSummaries(PortletRequest portletRequest)
       throws ModerationApiException {
@@ -33,10 +34,12 @@ public class CommentsModerationService {
   public void deleteCommentReports(UUID commentId, PortletRequest portletRequest)
       throws ModerationApiException {
     commentsModerationApiClient.deleteCommentReports(commentId, getToken(portletRequest));
+    auditService.audit("delete-comment-reports", portletRequest);
   }
 
   public void deleteComment(UUID commentId, PortletRequest portletRequest)
       throws ModerationApiException {
     commentsModerationApiClient.deleteComment(commentId, getToken(portletRequest));
+    auditService.audit("delete-comment", portletRequest);
   }
 }

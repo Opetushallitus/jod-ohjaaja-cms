@@ -14,6 +14,7 @@ import java.util.UUID;
 
 public record CommentReportSummaryDto(
     UUID artikkelinKommenttiId,
+    String artikkeliErc,
     String kommentti,
     Instant kommentinAika,
     int kirjautuneetMaara,
