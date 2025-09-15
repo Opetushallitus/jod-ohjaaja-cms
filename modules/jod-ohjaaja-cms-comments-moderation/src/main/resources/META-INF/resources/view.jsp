@@ -1,9 +1,9 @@
 <%@ page import="com.liferay.portal.kernel.servlet.SessionErrors" %>
 <%@ page import="com.liferay.portal.kernel.servlet.SessionMessages" %>
 <%@ page import="com.liferay.portal.kernel.util.DateFormatFactoryUtil" %>
+<%@ page import="com.liferay.portal.kernel.util.HtmlUtil" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto" %>
 <%@ page import="javax.portlet.PortletRequest" %>
-<%@ page import="java.lang.Boolean" %>
 <%@ page import="java.sql.Date" %>
 <%@ page import="java.text.DateFormat" %>
 <%@ page import="java.util.List" %>
@@ -21,6 +21,7 @@
           .toList())
       .orElse(List.of());
   boolean commentsEnabled = Boolean.TRUE.equals(request.getAttribute("commentsEnabled"));
+  String ohjaajaArticleShortUrlPrefix = (String) request.getAttribute("ohjaajaArticleShortUrlPrefix");
   PortletRequest portletRequest = (PortletRequest) request.getAttribute("javax.portlet.request");
 
   Locale userLocale = themeDisplay.getLocale();
@@ -46,7 +47,6 @@
         onClick="return handleConfirmationRequiringButtonClick(this);"
         cssClass="btn btn-sm"/>
   </p>
-
 
 
   <p>
@@ -86,12 +86,12 @@
       <table class="table table-striped">
         <thead>
         <tr>
-          <th><liferay-ui:message key="comment"/></th>
+          <th style="width: 40%"><liferay-ui:message key="comment"/></th>
           <th><liferay-ui:message key="comment.time"/></th>
           <th><liferay-ui:message key="registered.count"/></th>
           <th><liferay-ui:message key="anonymous.count"/></th>
           <th><liferay-ui:message key="latest.report"/></th>
-          <th><liferay-ui:message key="actions"/></th>
+          <th style="width: 180px"><liferay-ui:message key="actions"/></th>
         </tr>
         </thead>
         <tbody>
@@ -106,7 +106,11 @@
         </portlet:actionURL>
 
         <tr>
-          <td><%=summary.kommentti()%>
+          <td style="max-width: 400px; white-space: pre-line; overflow: hidden; text-overflow: ellipsis; word-break: break-word;"
+              title="<%=HtmlUtil.escape(summary.kommentti())%>">
+            <div style="max-height: 280px; overflow: auto;">
+              <%=HtmlUtil.escape(summary.kommentti())%>
+            </div>
           </td>
           <td><%=dateFormat.format(Date.from(summary.kommentinAika()))%>
           </td>
@@ -117,19 +121,28 @@
           <td><%=dateFormat.format(Date.from(summary.viimeisinIlmianto()))%>
           </td>
           <td>
-            <aui:button
-                value='<%= themeDisplay.translate("button.delete.comment")%>'
-                data-url="${deleteCommentURL}"
-                data-msg='<%= themeDisplay.translate("confirm.delete.comment\")%>'
-                onClick="return handleConfirmationRequiringButtonClick(this);"
-                cssClass="btn btn-danger btn-sm"/>
+            <div style="display: flex; flex-direction: column; gap: 0.5em;">
+              <aui:button
+                  value='<%= themeDisplay.translate("button.delete.comment")%>'
+                  data-url="${deleteCommentURL}"
+                  data-msg='<%= themeDisplay.translate("confirm.delete.comment\")%>'
+                  onClick="return handleConfirmationRequiringButtonClick(this);"
+                  cssClass="btn btn-danger btn-sm"/>
 
-            <aui:button
-                value='<%= themeDisplay.translate("button.delete.reports")%>'
-                data-url="${deleteReportURL}"
-                data-msg='<%= themeDisplay.translate("confirm.delete.reports\")%>'
-                onClick="return handleConfirmationRequiringButtonClick(this);"
-                cssClass="btn btn-warning btn-sm"/>
+              <aui:button
+                  value='<%= themeDisplay.translate("button.delete.reports")%>'
+                  data-url="${deleteReportURL}"
+                  data-msg='<%= themeDisplay.translate("confirm.delete.reports\")%>'
+                  onClick="return handleConfirmationRequiringButtonClick(this);"
+                  cssClass="btn btn-warning btn-sm"/>
+
+              <aui:button
+                  value='<%= themeDisplay.translate("button.view.article")%>'
+                  href="<%=ohjaajaArticleShortUrlPrefix+summary.artikkeliErc()%>"
+                  target="_blank"
+                  cssClass="btn btn-secondary btn-sm"
+              />
+            </div>
           </td>
         </tr>
         <% } %>

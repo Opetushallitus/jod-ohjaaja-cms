@@ -13,6 +13,7 @@ import com.liferay.portal.kernel.portlet.bridges.mvc.MVCPortlet;
 import com.liferay.portal.kernel.servlet.SessionErrors;
 import com.liferay.portal.kernel.servlet.SessionMessages;
 import com.liferay.portal.kernel.util.ParamUtil;
+import com.liferay.portal.kernel.util.PropsUtil;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.Feature;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.constants.CommentsModerationPortletKeys;
@@ -50,6 +51,8 @@ import org.osgi.service.component.annotations.Reference;
     service = Portlet.class)
 public class CommentsModerationPortlet extends MVCPortlet {
 
+  private static final String OHJAAJA_FRONTEND_URL = PropsUtil.get("ohjaaja.frontend.url");
+
   @Reference private CommentsModerationService commentsModerationService;
   @Reference private FeatureFlagsService featureFlagsService;
 
@@ -57,6 +60,8 @@ public class CommentsModerationPortlet extends MVCPortlet {
   public void doView(RenderRequest renderRequest, RenderResponse renderResponse)
       throws PortletException, IOException {
     try {
+      renderRequest.setAttribute(
+          "ohjaajaArticleShortUrlPrefix", OHJAAJA_FRONTEND_URL + "/fi/artikkeli/");
       renderRequest.setAttribute(
           "commentReportSummaries",
           commentsModerationService.getCommentReportSummaries(renderRequest));
