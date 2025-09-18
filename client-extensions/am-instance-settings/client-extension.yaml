@@ -1,0 +1,10 @@
+am-instance-settings:
+  type: instanceSettings
+  name: AM Image Variants
+  pid: com.liferay.adaptive.media.image.internal.configuration.AMImageCompanyConfiguration
+  imageVariants:
+    - "Thumbnail+300x300:This+image+resolution+was+automatically+added.:Thumbnail-300x300:max-height=300;max-width=300:enabled=true"
+    - "Preview+1000x0:This+image+resolution+was+automatically+added.:Preview-1000x0:max-height=100;max-width=0:enabled=true"
+    - "Article:Article+image+386x217:Article:max-width=386;max-height=217:enabled=true"
+    - "Card+Vertical:Card+vertical+image+261x147:Card-Vertical:max-width=261;max-height=147:enabled=true"
+    - "Card+Horizontal:Card+horizontal+image+255x143:Card-Horizontal:max-width=255;max-height=143:enabled=true"
