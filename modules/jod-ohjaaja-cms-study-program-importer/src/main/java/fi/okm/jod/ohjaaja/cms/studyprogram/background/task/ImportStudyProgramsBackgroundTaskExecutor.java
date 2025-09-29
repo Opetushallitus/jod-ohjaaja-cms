@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import javax.validation.ValidationException;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -216,8 +217,44 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     }
   }
 
+  /**
+   * Extracts an ingress (introductory text) from the given text by taking full sentences until
+   * reaching approximately 80 characters.
+   *
+   * @param text the input text, possibly containing HTML
+   * @return the extracted ingress text without HTML tags
+   */
   private String extractIngress(String text) {
-    return HtmlUtil.stripHtml(text).split("\\.")[0].trim() + ".";
+    var stripped = HtmlUtil.stripHtml(text).trim();
+    var ingress = new StringBuilder();
+    int length = 0;
+    var matcher = Pattern.compile("[^.!?]*[.!?]").matcher(stripped);
+    while (matcher.find()) {
+      String sentence = matcher.group().trim();
+      if (length > 0 && (length + sentence.length() > 80)) break;
+      ingress.append(sentence).append(" ");
+      length += sentence.length() + 1;
+    }
+    if (length == 0) {
+      // No sentence found, fallback to matching words and cutting at 80 chars
+      var wordMatcher = Pattern.compile("\\S+").matcher(stripped);
+      while (wordMatcher.find()) {
+        String word = wordMatcher.group();
+        if (length > 0 && (length + word.length() + 1 > 80)) break;
+        if (length > 0) {
+          ingress.append(" ");
+          length += 1;
+        }
+        ingress.append(word);
+        length += word.length();
+      }
+    }
+    if (ingress.isEmpty()) {
+      // Fallback to hard cut if no sentences or words found
+      ingress.append(stripped, 0, Math.min(80, stripped.length()));
+    }
+
+    return ingress.toString().trim();
   }
 
   private DDMFormFieldValue createLinkFieldsetValue(
