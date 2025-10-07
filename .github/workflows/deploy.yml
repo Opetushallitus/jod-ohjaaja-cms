@@ -29,11 +29,38 @@ jobs:
   deploy:
     permissions:
       id-token: write
+      contents: write
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     concurrency:
       group: deploy-${{ inputs.environment }}
     steps:
+      - name: Create production tag via GitHub API
+        if: inputs.environment == 'production'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+          BASE_VERSION="rel-$(date -u +'%Y%m%d')"
+          COMMIT_SHA="${GITHUB_SHA}"
+
+          VERSION="${BASE_VERSION}-1"
+          i=2
+
+          while gh api repos/${{ github.repository }}/git/ref/tags/$VERSION >/dev/null 2>&1; do
+            VERSION="${BASE_VERSION}-$i"
+            i=$((i+1))
+          done
+
+          echo "Creating tag $VERSION for commit $COMMIT_SHA"
+
+          gh api \
+            repos/${{ github.repository }}/git/refs \
+            -f ref="refs/tags/$VERSION" \
+            -f sha="$COMMIT_SHA"
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.JOD_AWS_DEPLOY_ROLE_ARN }}
