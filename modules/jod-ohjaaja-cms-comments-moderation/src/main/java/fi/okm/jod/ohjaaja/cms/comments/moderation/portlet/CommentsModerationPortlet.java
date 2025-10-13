@@ -17,18 +17,20 @@ import com.liferay.portal.kernel.util.PropsUtil;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.Feature;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.constants.CommentsModerationPortletKeys;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.service.CommentsModerationService;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.service.FeatureFlagsService;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import javax.portlet.*;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
 @Component(
-    immediate = true,
     property = {
       "com.liferay.portlet.css-class-wrapper=portlet-comments.moderation",
       "com.liferay.portlet.display-category=category.moderation",
@@ -59,19 +61,38 @@ public class CommentsModerationPortlet extends MVCPortlet {
   @Override
   public void doView(RenderRequest renderRequest, RenderResponse renderResponse)
       throws PortletException, IOException {
-    try {
-      renderRequest.setAttribute(
-          "ohjaajaArticleShortUrlPrefix", OHJAAJA_FRONTEND_URL + "/fi/artikkeli/");
-      renderRequest.setAttribute(
-          "commentReportSummaries",
-          commentsModerationService.getCommentReportSummaries(renderRequest));
-      renderRequest.setAttribute(
-          "commentsEnabled", featureFlagsService.isFeatureEnabled(renderRequest, Feature.COMMENTS));
-    } catch (ModerationApiException e) {
-      SessionErrors.add(renderRequest, "error.fetching.comment.reports");
-      renderRequest.setAttribute(
-          "commentReportSummaries", new ArrayList<CommentReportSummaryDto>());
+
+    String tab = ParamUtil.getString(renderRequest, "tab", "reported");
+    renderRequest.setAttribute(
+        "ohjaajaArticleShortUrlPrefix", OHJAAJA_FRONTEND_URL + "/fi/artikkeli/");
+    renderRequest.setAttribute(
+        "commentsEnabled", featureFlagsService.isFeatureEnabled(renderRequest, Feature.COMMENTS));
+
+    if ("reported".equals(tab)) {
+      try {
+        renderRequest.setAttribute(
+            "commentReportSummaries",
+            commentsModerationService.getCommentReportSummaries(renderRequest));
+
+      } catch (ModerationApiException e) {
+        SessionErrors.add(renderRequest, "error.fetching.comment.reports");
+        renderRequest.setAttribute(
+            "commentReportSummaries", new ArrayList<CommentReportSummaryDto>());
+      }
+    } else {
+      int currentPage = ParamUtil.getInteger(renderRequest, "currentPage", 1);
+      int pageSize = ParamUtil.getInteger(renderRequest, "pageSize", 10);
+
+      try {
+        PageDto<CommentDto> commentsPage =
+            commentsModerationService.getComments(renderRequest, currentPage - 1, pageSize);
+        renderRequest.setAttribute("commentsPage", commentsPage);
+      } catch (ModerationApiException e) {
+        SessionErrors.add(renderRequest, "error.fetching.comments");
+        renderRequest.setAttribute("commentsPage", new PageDto<>(List.of(), 0, 0));
+      }
     }
+
     super.doView(renderRequest, renderResponse);
   }
 

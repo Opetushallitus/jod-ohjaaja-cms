@@ -16,7 +16,9 @@ import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.util.PropsUtil;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -71,6 +73,33 @@ public class CommentsModerationApiClient {
       }
     } catch (Exception e) {
       log.error("Error while fetching kommentti report summaries from " + url, e);
+      throw new ModerationApiException(e);
+    }
+  }
+
+  public PageDto<CommentDto> fetchComments(String token, int page, int pageSize)
+      throws ModerationApiException {
+    var url = API_URL + "?sivu=" + page + "&koko=" + pageSize;
+    var request = createRequestBuilder(url, token).GET().build();
+
+    try {
+      var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+      if (response.statusCode() == 200) {
+        return objectMapper.readValue(
+            response.body(),
+            objectMapper.getTypeFactory().constructParametricType(PageDto.class, CommentDto.class));
+      } else {
+        throw new ModerationApiException(
+            "Failed to fetch comments from url "
+                + url
+                + " - Status code: "
+                + response.statusCode()
+                + ", Response: "
+                + response.body());
+      }
+    } catch (Exception e) {
+      log.error("Error while fetching comments from " + url, e);
       throw new ModerationApiException(e);
     }
   }

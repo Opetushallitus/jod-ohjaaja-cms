@@ -13,7 +13,9 @@ import static fi.okm.jod.ohjaaja.cms.comments.moderation.util.TokenUtil.getToken
 
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.CommentsModerationApiClient;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApiException;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
+import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto;
 import java.util.List;
 import java.util.UUID;
 import javax.portlet.PortletRequest;
@@ -25,6 +27,12 @@ public class CommentsModerationService {
 
   @Reference private CommentsModerationApiClient commentsModerationApiClient;
   @Reference private AuditService auditService;
+
+  public PageDto<CommentDto> getComments(
+      PortletRequest portletRequest, int pageNumber, int pageSize) throws ModerationApiException {
+    return commentsModerationApiClient.fetchComments(
+        getToken(portletRequest), pageNumber, pageSize);
+  }
 
   public List<CommentReportSummaryDto> getCommentReportSummaries(PortletRequest portletRequest)
       throws ModerationApiException {
