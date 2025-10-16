@@ -43,4 +43,10 @@ public class StudyProgramImporterConstants {
   public static final String STUDY_PROGRAM_CATEGORY_FINNISH_TITLE = "Ohjausalan koulutukset";
   public static final String STUDY_PROGRAM_CATEGORY_SWEDISH_TITLE = "Utbildningar inom vägledning";
   public static final String STUDY_PROGRAM_CATEGORY_ENGLISH_TITLE = "Guidance field training";
+  public static final String STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME =
+      "study_program_image_placeholder.png";
+  public static final String STUDY_PROGRAM_PLACEHOLDER_IMAGE_PATH =
+      "/images/" + STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME;
+  public static final String STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC =
+      "study_program_image_placeholder";
 }

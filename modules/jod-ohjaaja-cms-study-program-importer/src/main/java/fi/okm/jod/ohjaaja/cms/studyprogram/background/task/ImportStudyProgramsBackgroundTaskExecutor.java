@@ -175,7 +175,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
               SWEDISH,
               studyProgram.nimi().getOrDefault("sv", studyProgram.nimi().getOrDefault("fi", "")));
 
-      var content = getContent(structure, studyProgram);
+      var content = getContent(structure, studyProgram, titleMap);
 
       if (journalArticle != null) {
         log.info("Study program already imported: " + studyProgram.oid() + ". Updating article.");
@@ -290,7 +290,9 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     return fieldset;
   }
 
-  private String getContent(DDMStructure structure, StudyProgramDto studyProgram) throws Exception {
+  private String getContent(
+      DDMStructure structure, StudyProgramDto studyProgram, Map<Locale, String> titleMap)
+      throws Exception {
     var ddmForm = structure.getDDMForm();
     var formValues = new DDMFormValues(ddmForm);
     formValues.setAvailableLocales(Set.of(FINNISH, ENGLISH, SWEDISH));
@@ -306,15 +308,23 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
     if (Validator.isNotNull(studyProgram.teemakuva())) {
       var imageUrl = studyProgram.teemakuva();
-      var json = studyProgramFileService.getImageJSON(imageUrl, studyProgram.oid());
-      if (json != null) {
-        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", json));
+      var fileEntry = studyProgramFileService.getStudyProgramImage(imageUrl, studyProgram.oid());
+      if (fileEntry != null) {
+        var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
+        formValues.addDDMFormFieldValue(imageFormFieldValue);
       } else {
         log.warn("Image import failed " + studyProgram.teemakuva());
         formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
       }
     } else {
-      formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
+      var fileEntry = studyProgramFileService.getStudyProgramImagePlaceholder();
+      if (fileEntry != null) {
+        var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
+        formValues.addDDMFormFieldValue(imageFormFieldValue);
+      } else {
+        log.warn("Placeholder image missing");
+        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
+      }
     }
 
     formValues.addDDMFormFieldValue(
