@@ -19,6 +19,7 @@ import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstant
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.model.role.RoleConstants;
+import com.liferay.portal.kernel.repository.model.FileEntry;
 import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.util.StringUtil;
@@ -54,6 +55,42 @@ public class StudyProgramImporterUtil {
       } else {
         localizedValue.addString(entry.getKey(), "");
       }
+    }
+
+    fieldValue.setValue(localizedValue);
+
+    return fieldValue;
+  }
+
+  public static DDMFormFieldValue createImageFieldValue(
+      FileEntry fileEntry, Map<Locale, String> titleMap) {
+
+    var fieldValue = new DDMFormFieldValue();
+    fieldValue.setName("image");
+    fieldValue.setFieldReference("image");
+    fieldValue.setInstanceId(StringUtil.randomString());
+
+    var localizedValue = new LocalizedValue(FINNISH);
+    for (Map.Entry<Locale, String> entry : titleMap.entrySet()) {
+
+      localizedValue.addString(
+          entry.getKey(),
+          String.format(
+              """
+            {
+              "alt": "%s",
+              "groupId": %d,
+              "name": "%s",
+              "title": "%s",
+              "type": "document",
+              "uuid": "%s"
+            }
+          """,
+              entry.getValue(),
+              fileEntry.getGroupId(),
+              fileEntry.getFileName(),
+              entry.getValue(),
+              fileEntry.getUuid()));
     }
 
     fieldValue.setValue(localizedValue);

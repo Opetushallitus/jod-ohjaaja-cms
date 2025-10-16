@@ -9,8 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.IMAGE_FOLDER_NAME;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
+import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.*;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
 
 import com.liferay.document.library.kernel.model.DLVersionNumberIncrease;
@@ -27,6 +26,8 @@ import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.exception.StudyProgramImageFolderDeleteException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Paths;
 import org.osgi.service.component.annotations.Component;
@@ -37,18 +38,44 @@ public class StudyProgramFileService {
   private static final Log log = LogFactoryUtil.getLog(StudyProgramFileService.class);
   @Reference private DLAppLocalService dlAppLocalService;
 
-  public String getImageJSON(String imageUrl, String oid) {
-    try {
+  public FileEntry getStudyProgramImage(String imageUrl, String oid) {
 
-      String fileName;
-      try {
-        var uri = new URI(imageUrl);
-        fileName = Paths.get(uri.getPath()).getFileName().toString();
-      } catch (Exception e) {
-        fileName = "studyprogram-" + oid + ".jpg";
-      }
+    String fileName;
+    try {
+      var uri = new URI(imageUrl);
+      fileName = Paths.get(uri.getPath()).getFileName().toString();
+    } catch (Exception e) {
+      fileName = "studyprogram-" + oid + ".jpg";
+    }
+
+    try {
       var bytes = HttpUtil.URLtoByteArray(imageUrl);
 
+      return getOrCreateFileEntryByExternalReferenceCode(oid, fileName, bytes);
+
+    } catch (Exception e) {
+      log.error("Failed to fetch or store image from URL: " + imageUrl, e);
+    }
+
+    return null;
+  }
+
+  public FileEntry getStudyProgramImagePlaceholder() {
+
+    try {
+      var bytes =
+          readImageBytes(StudyProgramImporterConstants.STUDY_PROGRAM_PLACEHOLDER_IMAGE_PATH);
+      return getOrCreateFileEntryByExternalReferenceCode(
+          STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC, STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME, bytes);
+    } catch (IOException e) {
+      log.error("Failed to read placeholder image from resources", e);
+      return null;
+    }
+  }
+
+  public FileEntry getOrCreateFileEntryByExternalReferenceCode(
+      String externalReferenceCode, String fileName, byte[] bytes) {
+    try {
       var userId = getUser(PortalUtil.getDefaultCompanyId()).getUserId();
       var folderId = getOrCreateImageFolderId(userId);
 
@@ -60,11 +87,13 @@ public class StudyProgramFileService {
 
       FileEntry fileEntry = null;
       try {
-        fileEntry = dlAppLocalService.getFileEntryByExternalReferenceCode(oid, JOD_GROUP_ID);
+        fileEntry =
+            dlAppLocalService.getFileEntryByExternalReferenceCode(
+                externalReferenceCode, JOD_GROUP_ID);
       } catch (PortalException e) {
-        log.error(
+        log.info(
             "No existing file entry found for external reference code: "
-                + oid
+                + externalReferenceCode
                 + ". Creating a new one.");
       }
 
@@ -90,7 +119,7 @@ public class StudyProgramFileService {
       } else {
         fileEntry =
             dlAppLocalService.addFileEntry(
-                oid, // externalReferenceCode
+                externalReferenceCode,
                 userId,
                 JOD_GROUP_ID,
                 folderId,
@@ -106,27 +135,22 @@ public class StudyProgramFileService {
                 null,
                 serviceContext);
       }
-      return String.format(
-          """
-            {
-              "alt": "%s",
-              "groupId": %d,
-              "name": "%s",
-              "title": "%s",
-              "type": "document",
-              "uuid": "%s"
-            }
-          """,
-          fileEntry.getTitle(),
-          fileEntry.getGroupId(),
-          fileEntry.getFileName(),
-          fileEntry.getTitle(),
-          fileEntry.getUuid());
+      return fileEntry;
 
     } catch (Exception e) {
-      log.error("Failed to get image JSON for URL: " + imageUrl, e);
+      log.error(
+          "Failed to get or create image " + fileName + " (ERC: " + externalReferenceCode + ")", e);
     }
     return null;
+  }
+
+  public byte[] readImageBytes(String resourcePath) throws IOException {
+    try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+      if (is == null) {
+        throw new IOException("Resource not found: " + resourcePath);
+      }
+      return is.readAllBytes();
+    }
   }
 
   public void deleteStudyProgramImageFolder() throws StudyProgramImageFolderDeleteException {
