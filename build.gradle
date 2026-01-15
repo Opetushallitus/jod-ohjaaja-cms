@@ -12,3 +12,250 @@ if (System.getenv("CI") == null) {
     dependsOn 'installGitHooks'
   }
 }
+
+tasks.register('dockerRemoveTestImage', Exec) {
+  ignoreExitValue = true
+  commandLine 'docker', 'rmi', '-f', 'liferay-test'
+}
+
+tasks.register('copyTestDockerfile', Copy) {
+  from "${rootProject.projectDir}/Dockerfile.test"
+  into layout.buildDirectory.dir('docker')
+}
+
+tasks.register('downloadPortalTestBundle', Copy) {
+  from configurations.detachedConfiguration(
+    dependencies.create('com.liferay.portal:com.liferay.portal.test:30.0.0')
+  )
+  into layout.buildDirectory.dir('docker/portal-test-libs')
+  rename { 'com.liferay.portal.test.jar' }
+  doFirst {
+    println "Downloading com.liferay.portal.test bundle"
+  }
+}
+
+tasks.register('copyArquillianConnectorToDocker', Copy) {
+  dependsOn ':test:arquillian-extension-junit-bridge-connector:build'
+  from "${rootProject.projectDir}/test/arquillian-extension-junit-bridge-connector/build/libs/arquillian-extension-junit-bridge-connector.jar"
+  into layout.buildDirectory.dir('docker/test/arquillian-extension-junit-bridge-connector/build/libs')
+  doFirst {
+    println "Copying Arquillian connector JAR to Docker context"
+  }
+}
+
+tasks.register('dockerBuildTestImage', Exec) {
+  dependsOn tasks.named('copyTestDockerfile'), tasks.named('copyArquillianConnectorToDocker'), tasks.named('downloadPortalTestBundle')
+  commandLine 'docker', 'build', '-t', 'liferay-test', '-f', "${layout.buildDirectory.get().asFile}/docker/Dockerfile.test", "${layout.buildDirectory.get().asFile}/docker"
+}
+
+gradle.projectsEvaluated {
+  def allDockerDeployTasks = []
+  subprojects.each { p ->
+    if (!p.name.endsWith('-test')) {
+      allDockerDeployTasks += p.tasks.findByName('dockerDeploy')
+    }
+  }
+  allDockerDeployTasks += tasks.findByName('dockerDeploy')
+  allDockerDeployTasks = allDockerDeployTasks.findAll { it != null }
+
+  tasks.named('dockerBuildTestImage') {
+    dependsOn tasks.named('dockerRemoveTestImage'), tasks.named('createDockerfile')
+    dependsOn allDockerDeployTasks
+  }
+}
+
+tasks.register('dockerRunTestContainer') {
+    group = 'docker'
+    description = 'Run Liferay test container'
+
+    doLast {
+        exec {
+            commandLine 'docker', 'run', '-d',
+                '--name', 'liferay-test-container',
+                '-p', '8080:8080',
+                '-p', '8099:8099',
+                '-p', '11311:11311',
+                '-p', '32763:32763',
+                '-e', 'LIFERAY_WORKSPACE_ENVIRONMENT=test',
+                'liferay-test:latest'
+        }
+
+        println '⏳ Waiting for Liferay to start (this takes ~2 minutes)...'
+
+        // Wait for Liferay to be ready
+        def maxAttempts = 120
+        def attempt = 0
+        def ready = false
+
+        while (attempt < maxAttempts && !ready) {
+            try {
+                def response = URI.create('http://localhost:8080').toURL().openConnection().with {
+                    requestMethod = 'GET'
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    connect()
+                    responseCode
+                }
+                if (response == 200) {
+                    ready = true
+                    println '✅ Liferay is ready!'
+                }
+            } catch (Exception ignored) {
+                attempt++
+                Thread.sleep(5000)
+                if (attempt % 6 == 0) {
+                    println "Still waiting... (${attempt * 5}s)"
+                }
+            }
+        }
+
+        if (!ready) {
+            throw new GradleException('Liferay did not start in time')
+        }
+    }
+}
+
+tasks.register('dockerStopTestContainer') {
+    group = 'docker'
+    description = 'Stop and remove Liferay test container'
+
+    doLast {
+        exec {
+            commandLine 'docker', 'stop', 'liferay-test-container'
+            ignoreExitValue = true
+        }
+        exec {
+            commandLine 'docker', 'rm', 'liferay-test-container'
+            ignoreExitValue = true
+        }
+        println '🛑 Test container stopped and removed'
+    }
+}
+
+tasks.register('dockerLogsTestContainer') {
+    group = 'docker'
+    description = 'Show logs from Liferay test container'
+
+    doLast {
+        exec {
+            commandLine 'docker', 'logs', '-f', 'liferay-test-container'
+            ignoreExitValue = true
+        }
+    }
+}
+
+tasks.register('waitForLiferayToStabilize') {
+  group = 'docker'
+  description = 'Wait for Liferay to fully stabilize after startup'
+
+  mustRunAfter 'dockerRunTestContainer'
+
+  doLast {
+    println '\n⏳ Waiting 5 seconds for Liferay to stabilize...'
+    Thread.sleep(5000)
+  }
+}
+
+gradle.projectsEvaluated {
+  def testTasks = subprojects
+      .findAll { it.name.endsWith('-test') }
+      .collect { it.tasks.named('test') }
+
+  testTasks.each { task ->
+    task.get().mustRunAfter ':waitForLiferayToStabilize'
+  }
+  tasks.named('testWithDockerContainer').configure {
+    dependsOn testTasks
+    finalizedBy 'unifiedTestReport'
+  }
+  tasks.named('unifiedTestReport').configure {
+    mustRunAfter testTasks
+    reportOn testTasks.collect { it.get() }
+  }
+}
+
+tasks.register('showDockerLogs') {
+  group = 'docker'
+  description = 'Show last 100 lines of Liferay container logs'
+
+  doLast {
+    println '\n📋 Container logs (last 100 lines)...'
+    try {
+      project.exec {
+        commandLine 'docker', 'logs', '--tail', '100', 'liferay-test-container'
+        standardOutput = System.out
+        errorOutput = System.err
+        ignoreExitValue = true
+      }
+    } catch (Exception e) {
+      println '⚠️  Failed to get logs: ' + e.message
+    }
+  }
+}
+
+tasks.register('testWithDockerContainer') {
+  group = 'verification'
+  description = 'Run tests against Docker container (builds image, starts container, runs tests, stops container)'
+
+  dependsOn 'dockerBuildTestImage', 'dockerRunTestContainer', 'waitForLiferayToStabilize'
+  finalizedBy 'showDockerLogs', 'dockerStopTestContainer'
+
+  doFirst {
+    println '================================================'
+    println '🐳 Docker Container Test Workflow'
+    println '================================================'
+  }
+
+  doLast {
+    println '\n================================================'
+    println '✅ Docker Container Test Workflow COMPLETE'
+    println '================================================'
+  }
+}
+
+
+tasks.register('unifiedTestReport', TestReport) {
+  description = 'Generates a unified HTML test report from all test modules (auto-discovers *-test modules)'
+  group = 'verification'
+
+  destinationDirectory = layout.buildDirectory.dir('reports/unified-tests')
+
+  doLast {
+    def reportFile = destinationDirectory.file('index.html').get().asFile
+    if (reportFile.exists()) {
+      println "✅ Unified test report generated successfully!"
+      println "   📊 Report location: ${reportFile.absolutePath}"
+      println "   🌐 Open in browser: file://${reportFile.absolutePath}"
+    } else {
+      println "⚠️  No test report generated. Make sure tests have been run first."
+    }
+  }
+}
+
+// Configure the test report task after project evaluation
+gradle.projectsEvaluated {
+  tasks.named('unifiedTestReport').configure {
+    // Find all test modules dynamically
+    def testModules = []
+    file("${rootProject.projectDir}/modules").eachDir { dir ->
+      if (dir.name.endsWith('-test')) {
+        testModules.add(dir.name)
+      }
+    }
+
+    testModules.each { moduleName ->
+      def binaryResultsDir = file("${rootProject.projectDir}/modules/${moduleName}/build/test-results/test/binary")
+      if (binaryResultsDir.exists()) {
+        testResults.from(binaryResultsDir)
+      }
+    }
+  }
+}
+
+// Ensure correct task order (keep for reference)
+gradle.projectsEvaluated {
+    // This ensures dockerRunTestContainer runs after dockerBuildTestImage
+    tasks.named('dockerRunTestContainer').configure {
+        mustRunAfter 'dockerBuildTestImage'
+    }
+}

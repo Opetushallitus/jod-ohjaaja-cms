@@ -25,4 +25,4 @@ for COMMIT in $NEW_COMMITS; do
   fi
 done
 
-./gradlew --console=plain --offline --quiet check
+./gradlew --console=plain --offline --quiet clean jar spotlessJavaCheck
