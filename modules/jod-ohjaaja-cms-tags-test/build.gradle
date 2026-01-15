@@ -1,0 +1,63 @@
+plugins {
+  id 'java'
+}
+
+repositories {
+  mavenCentral()
+  maven {
+    url "https://repository-cdn.liferay.com/nexus/content/groups/public"
+  }
+}
+
+dependencies {
+  // Module under test
+  testImplementation project(':modules:jod-ohjaaja-cms-tags')
+
+  // Liferay Arquillian extension - custom runner for in-container tests
+  testImplementation project(':test:arquillian-extension-junit-bridge')
+
+  // Liferay Arquillian connector - manages deployment and communication
+  testImplementation project(':test:arquillian-extension-junit-bridge-connector')
+
+  // JUnit 4
+  testImplementation group: "junit", name: "junit", version: "4.13.2"
+
+  // Liferay APIs (for testing)
+  testImplementation group: "com.liferay.portal", name: "release.portal.api", version: "7.4.3.132-ga132"
+  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.kernel", version: "latest.release"
+  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test", version: "30.0.0"
+  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test.integration", version: "latest.release"
+
+  // Logging
+  testImplementation group: "org.slf4j", name: "slf4j-api", version: "1.7.36"
+  testImplementation group: "org.slf4j", name: "slf4j-simple", version: "1.7.36"
+  testImplementation group: "org.apache.logging.log4j", name: "log4j-core", version: "2.25.3"
+  testImplementation group: "org.apache.logging.log4j", name: "log4j-api", version: "2.25.3"
+
+  // OSGi
+  testImplementation group: "org.osgi", name: "org.osgi.core", version: "6.0.0"
+}
+
+test {
+  useJUnit()
+
+  jvmArgs = [
+      '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+      '--add-opens=java.base/java.lang=ALL-UNNAMED',
+      '--add-opens=java.base/java.util=ALL-UNNAMED'
+  ]
+
+  testLogging {
+    events "passed", "skipped", "failed"
+    exceptionFormat "full"
+    showStandardStreams = true
+  }
+
+  systemProperty "arquillian.launch", "liferay"
+  systemProperty "liferay.arquillian.report.host", "172.17.0.1"
+}
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_21
+  targetCompatibility = JavaVersion.VERSION_21
+}

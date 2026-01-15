@@ -50,5 +50,37 @@ When the test environment is running, you can deploy changes to modules with the
 
 This command will apply updates to the running environment without requiring a restart.
 
+## Testing
+
+### Running All Integration Tests
+
+Run all integration tests in a Docker container with a single command:
+
+```sh
+./gradlew testWithDockerContainer
+```
+
+This will:
+- Build and start a Liferay test container
+- Automatically discover and run all test modules (modules ending with `-test`)
+- Generate a unified HTML test report at `build/reports/unified-tests/index.html`
+- Clean up the container after tests complete
+
+### Generate Unified Test Report
+
+After running tests, generate or view the unified report:
+
+```sh
+./gradlew unifiedTestReport
+```
+
+### Adding New Test Modules
+
+1. Create a new module in `modules/` directory with name ending in `-test`
+   - Example: `modules/jod-ohjaaja-cms-myfeature-test/`
+
+2. That's it! The test will be automatically discovered and included.
+
+For detailed testing documentation, see [test/ARQUILLIAN_README.md](test/ARQUILLIAN_README.md).
 
 

@@ -26,6 +26,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v3
 
+      - name: Test with Gradle
+        run: ./gradlew --no-daemon clean testWithDockerContainer
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: build/reports/unified-tests
+          retention-days: 30
+
       - name: Build with Gradle
         run: ./gradlew --no-daemon clean createDockerfile dockerDeploy
 

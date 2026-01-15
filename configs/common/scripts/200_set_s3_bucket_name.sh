@@ -2,7 +2,7 @@
 
 CONFIG_FILE="${LIFERAY_HOME}/osgi/configs/com.liferay.portal.store.s3.configuration.S3StoreConfiguration.config"
 
-if [[ "$LIFERAY_WORKSPACE_ENVIRONMENT" != "local" ]]; then
+if [[ "$LIFERAY_WORKSPACE_ENVIRONMENT" != "local" &&  "$LIFERAY_WORKSPACE_ENVIRONMENT" != "test" ]]; then
     if [[ -z "$JOD_OHJAAJA_S3_BUCKET_NAME" || -z "$AWS_REGION" ]]; then
         echo "Warning: JOD_OHJAAJA_S3_BUCKET_NAME or AWS_REGION is missing. Deleting file $CONFIG_FILE."
         rm -f "$CONFIG_FILE"

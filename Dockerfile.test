@@ -1,0 +1,39 @@
+FROM liferay/portal:7.4.3.132-ga132
+
+ENV LIFERAY_WORKSPACE_ENVIRONMENT=test
+ENV LIFERAY_GOGO_SHELL_LOCAL_PORT=11311
+
+# Copy Arquillian connector for testing
+COPY --chown=liferay:liferay test/arquillian-extension-junit-bridge-connector/build/libs/arquillian-extension-junit-bridge-connector.jar /opt/liferay/osgi/modules/
+
+# Copy portal.test bundle for @Inject and @DeleteAfterTestRun support
+COPY --chown=liferay:liferay portal-test-libs/com.liferay.portal.test.jar /opt/liferay/osgi/modules/
+
+# Copy all application modules (excluding test modules)
+COPY --chown=liferay:liferay deploy/*.jar /opt/liferay/osgi/modules/
+
+# Expose ports:
+# 8080 - Liferay HTTP
+# 8099 - JMX
+# 8000 - Java Debug (JPDA)
+# 32763 - Arquillian connector socket
+EXPOSE 8080 8099 8000 11311 32763 32764
+
+
+USER liferay:liferay
+WORKDIR /opt/liferay
+
+# Add JPDA options for remote debugging and JMX
+ENV CATALINA_OPTS="-agentlib:jdwp=transport=dt_socket,address=*:8000,server=y,suspend=n \
+-Dcom.sun.management.jmxremote=true \
+-Dcom.sun.management.jmxremote.port=8099 \
+-Dcom.sun.management.jmxremote.rmi.port=8099 \
+-Dcom.sun.management.jmxremote.authenticate=false \
+-Dcom.sun.management.jmxremote.ssl=false \
+-Dcom.sun.management.jmxremote.local.only=false \
+-Djava.rmi.server.hostname=localhost"
+
+USER liferay:liferay
+WORKDIR /opt/liferay
+ENTRYPOINT ["/usr/local/bin/liferay_entrypoint.sh"]
+

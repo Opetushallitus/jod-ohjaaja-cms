@@ -1,0 +1,37 @@
+plugins {
+  id 'java-library'
+}
+
+repositories {
+  mavenCentral()
+  maven {
+    url "https://repository.liferay.com/nexus/content/groups/public"
+  }
+}
+
+dependencies {
+	api group: "biz.aQute.bnd", name: "biz.aQute.bnd", version: "6.4.0"
+	api group: "org.osgi", name: "osgi.core", version: "6.0.0"
+
+	compileOnly group: "junit", name: "junit", version: "4.13.1"
+  api project(":test:arquillian-extension-junit-bridge-connector")
+}
+
+jar {
+  manifest {
+    attributes(
+      'Bundle-Name': 'Liferay Arquillian Extension JUnit Bridge',
+      'Bundle-SymbolicName': 'com.liferay.arquillian.extension.junit.bridge',
+      'Bundle-Version': '1.0.21',
+      'Bundle-ManifestVersion': '2',
+      'Bundle-Activator': 'com.liferay.arquillian.extension.junit.bridge.server.TestBundleActivator',
+      'Import-Package': 'junit.framework;version="[4.13,5)";resolution:=optional,org.osgi.framework;version="[1.8,2)"',
+      'Export-Package': 'com.liferay.arquillian.extension.junit.bridge.client,com.liferay.arquillian.extension.junit.bridge.connector,com.liferay.arquillian.extension.junit.bridge.junit,com.liferay.arquillian.extension.junit.bridge.protocol.osgi,com.liferay.arquillian.extension.junit.bridge.remote,com.liferay.arquillian.extension.junit.bridge.server'
+    )
+  }
+}
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_11
+  targetCompatibility = JavaVersion.VERSION_11
+}
