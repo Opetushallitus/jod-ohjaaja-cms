@@ -4,25 +4,25 @@ on:
     inputs:
       environment:
         type: string
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
       tag:
         type: string
-        description: 'Image tag to deploy'
+        description: "Image tag to deploy"
         required: true
   workflow_dispatch:
     inputs:
       environment:
         type: choice
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
-        default: 'dev'
+        default: "dev"
         options:
           - dev
           - test
       tag:
         type: string
-        description: 'Image tag to deploy'
+        description: "Image tag to deploy"
         required: true
 
 jobs:
@@ -61,7 +61,7 @@ jobs:
             -f ref="refs/tags/$VERSION" \
             -f sha="$COMMIT_SHA"
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.JOD_AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-west-1
