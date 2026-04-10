@@ -61,7 +61,7 @@ jobs:
             -f ref="refs/tags/$VERSION" \
             -f sha="$COMMIT_SHA"
 
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
         with:
           role-to-assume: ${{ secrets.JOD_AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-west-1
@@ -84,7 +84,7 @@ jobs:
           .registeredBy)'
           raw-task-definition.json > task-definition.json
 
-      - uses: aws-actions/amazon-ecs-render-task-definition@v1
+      - uses: aws-actions/amazon-ecs-render-task-definition@77954e213ba1f9f9cb016b86a1d4f6fcdea0d57e # v1
         id: render-task-def
         with:
           task-definition: task-definition.json
@@ -93,7 +93,7 @@ jobs:
           environment-variables: "LIFERAY_UPGRADE_PERIOD_DATABASE_PERIOD_AUTO_PERIOD_RUN=false"
 
       - name: Deploy ECS Service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        uses: aws-actions/amazon-ecs-deploy-task-definition@fc8fc60f3a60ffd500fcb13b209c59d221ac8c8c # v2
         id: ecs-deploy
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
