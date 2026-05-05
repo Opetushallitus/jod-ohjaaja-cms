@@ -20,7 +20,7 @@ import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.PortalUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
-import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +33,7 @@ public class ImportStudyProgramsSchedulerJobConfiguration implements SchedulerJo
 
   private TriggerConfiguration triggerConfiguration;
   @Reference private BackgroundTaskManager backgroundTaskManager;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   @Activate
   protected void activate() {
@@ -49,7 +50,7 @@ public class ImportStudyProgramsSchedulerJobConfiguration implements SchedulerJo
       PermissionThreadLocal.setPermissionChecker(checker);
 
       ServiceContext serviceContext = new ServiceContext();
-      serviceContext.setScopeGroupId(StudyProgramImporterConstants.JOD_GROUP_ID);
+      serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       serviceContext.setUserId(userId);
 
       var taskContextMap = new HashMap<String, Serializable>();

@@ -32,6 +32,7 @@ import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.portlet.asset.util.AssetVocabularySettingsHelper;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodCategoryType;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.Locale;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
@@ -56,9 +57,9 @@ public class JodOhjaajaCmsTagsDtoConverter
 
   @Reference private Portal portal;
 
-  private static final Log log = LogFactoryUtil.getLog(JodOhjaajaCmsTagsDtoConverter.class);
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
-  private static final long JOD_GROUP_ID = 20117;
+  private static final Log log = LogFactoryUtil.getLog(JodOhjaajaCmsTagsDtoConverter.class);
 
   @Override
   public String getContentType() {
@@ -117,7 +118,8 @@ public class JodOhjaajaCmsTagsDtoConverter
     try {
       tagVocabulary =
           assetVocabularyLocalService.getAssetVocabularyByExternalReferenceCode(
-              JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE, JOD_GROUP_ID);
+              JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE,
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     } catch (PortalException e) {
       log.info(
           "No tag vocabulary found for JodTaxonomyCategory with external reference code "
@@ -152,7 +154,7 @@ public class JodOhjaajaCmsTagsDtoConverter
             assetVocabularyLocalService.addVocabulary(
                 JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE,
                 user.getUserId(),
-                JOD_GROUP_ID,
+                jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
                 "tags",
                 null,
                 titleMap,

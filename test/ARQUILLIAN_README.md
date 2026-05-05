@@ -191,7 +191,7 @@ Example `build.gradle`:
 dependencies {
     compileOnly project(':modules:my-module')
 
-    testCompileOnly group: "com.liferay.portal", name: "release.portal.api"
+    testCompileOnly group: "com.liferay.portal", name: "release.dxp.api"
     testCompileOnly project(':test:arquillian-extension-junit-bridge')
 }
 ```

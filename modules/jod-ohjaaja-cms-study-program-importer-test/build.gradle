@@ -10,6 +10,7 @@ repositories {
 }
 
 dependencies {
+  testImplementation project(':modules:jod-ohjaaja-cms-util')
   // Module under test
   testImplementation project(':modules:jod-ohjaaja-cms-study-program-importer')
 
@@ -23,7 +24,7 @@ dependencies {
   testImplementation group: "junit", name: "junit", version: "4.13.2"
 
   // Liferay APIs (for testing)
-  testImplementation group: "com.liferay.portal", name: "release.portal.api", version: "7.4.3.132-ga132"
+  testImplementation group: "com.liferay.portal", name: "release.dxp.api", version: "7.4.3.132-ga132"
   testImplementation group: "com.liferay.portal", name: "com.liferay.portal.kernel", version: "latest.release"
   testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test", version: "30.0.0"
   testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test.integration", version: "latest.release"

@@ -9,7 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.background.task;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
 
 import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
@@ -39,14 +38,14 @@ public abstract class BaseStudyProgramBackgroundTaskExecutor extends BaseBackgro
     return null;
   }
 
-  protected ServiceContext getServiceContext() throws PortalException {
+  protected ServiceContext getServiceContext(Long groupId) throws PortalException {
     var user = getUser(PortalUtil.getDefaultCompanyId());
 
     var serviceContext = new ServiceContext();
     serviceContext.setAddGroupPermissions(true);
     serviceContext.setAddGuestPermissions(true);
     serviceContext.setCompanyId(PortalUtil.getDefaultCompanyId());
-    serviceContext.setScopeGroupId(JOD_GROUP_ID);
+    serviceContext.setScopeGroupId(groupId);
     serviceContext.setUserId(user.getUserId());
     return serviceContext;
   }

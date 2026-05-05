@@ -26,6 +26,7 @@ import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.exception.StudyProgramImageFolderDeleteException;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -37,6 +38,7 @@ import org.osgi.service.component.annotations.Reference;
 public class StudyProgramFileService {
   private static final Log log = LogFactoryUtil.getLog(StudyProgramFileService.class);
   @Reference private DLAppLocalService dlAppLocalService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   public FileEntry getStudyProgramImage(String imageUrl, String oid) {
 
@@ -80,7 +82,7 @@ public class StudyProgramFileService {
       var folderId = getOrCreateImageFolderId(userId);
 
       var serviceContext = new ServiceContext();
-      serviceContext.setScopeGroupId(JOD_GROUP_ID);
+      serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       serviceContext.setUserId(userId);
       serviceContext.setAddGuestPermissions(true);
       serviceContext.setAddGuestPermissions(true);
@@ -89,7 +91,7 @@ public class StudyProgramFileService {
       try {
         fileEntry =
             dlAppLocalService.getFileEntryByExternalReferenceCode(
-                externalReferenceCode, JOD_GROUP_ID);
+                externalReferenceCode, jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       } catch (PortalException e) {
         log.info(
             "No existing file entry found for external reference code: "
@@ -121,7 +123,7 @@ public class StudyProgramFileService {
             dlAppLocalService.addFileEntry(
                 externalReferenceCode,
                 userId,
-                JOD_GROUP_ID,
+                jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
                 folderId,
                 fileName,
                 MimeTypesUtil.getContentType(fileName),
@@ -156,7 +158,9 @@ public class StudyProgramFileService {
   public void deleteStudyProgramImageFolder() throws StudyProgramImageFolderDeleteException {
     Folder folder;
     try {
-      folder = dlAppLocalService.getFolder(JOD_GROUP_ID, 0, IMAGE_FOLDER_NAME);
+      folder =
+          dlAppLocalService.getFolder(
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), 0, IMAGE_FOLDER_NAME);
     } catch (PortalException e) {
       log.error("DL folder not found: " + IMAGE_FOLDER_NAME);
       return;
@@ -175,18 +179,20 @@ public class StudyProgramFileService {
 
   private long getOrCreateImageFolderId(long userId) throws PortalException {
     try {
-      var folder = dlAppLocalService.getFolder(JOD_GROUP_ID, 0, IMAGE_FOLDER_NAME);
+      var folder =
+          dlAppLocalService.getFolder(
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), 0, IMAGE_FOLDER_NAME);
       return folder.getFolderId();
     } catch (PortalException e) {
       var ctx = new ServiceContext();
-      ctx.setScopeGroupId(JOD_GROUP_ID);
+      ctx.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       ctx.setAddGuestPermissions(true);
       ctx.setAddGroupPermissions(true);
       var folder =
           dlAppLocalService.addFolder(
               StringUtil.randomString(),
               userId,
-              JOD_GROUP_ID,
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
               0,
               IMAGE_FOLDER_NAME,
               StudyProgramImporterConstants.IMAGE_FOLDER_DESCRIPTION,

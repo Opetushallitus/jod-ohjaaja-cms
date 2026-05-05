@@ -16,9 +16,9 @@ import fi.okm.jod.ohjaaja.cms.comments.moderation.client.exception.ModerationApi
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto;
+import jakarta.portlet.PortletRequest;
 import java.util.List;
 import java.util.UUID;
-import javax.portlet.PortletRequest;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 

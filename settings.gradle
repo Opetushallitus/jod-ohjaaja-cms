@@ -3,6 +3,7 @@ project(':test:arquillian-extension-junit-bridge-connector').projectDir = file('
 include ':test:arquillian-extension-junit-bridge'
 project(':test:arquillian-extension-junit-bridge').projectDir = file('test/arquillian-extension-junit-bridge')
 
+include ':modules:jod-ohjaaja-cms-util'
 include ':modules:jod-ohjaaja-cms-tags-test'
 include ':modules:jod-ohjaaja-cms-navigation-test'
 include ':modules:jod-ohjaaja-cms-study-program-importer-test'
@@ -12,9 +13,9 @@ include ':modules:jod-ohjaaja-cms-search-test'
 
 buildscript {
 	dependencies {
-		classpath group: "com.liferay", name: "com.liferay.gradle.plugins.workspace", version: "13.1.2"
+		classpath group: "com.liferay", name: "com.liferay.gradle.plugins.workspace", version: "14.0.0"
     classpath group: "com.liferay", name: "com.liferay.gradle.plugins.test.integration", version: "4.0.0"
-    classpath group: "com.liferay", name: "com.liferay.gradle.plugins", version: "latest.release"
+    classpath group: "com.liferay", name: "com.liferay.gradle.plugins", version: "16.0.0"
 	}
 
 	repositories {

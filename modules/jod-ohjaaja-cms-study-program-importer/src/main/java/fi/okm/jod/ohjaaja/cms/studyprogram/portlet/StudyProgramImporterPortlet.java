@@ -25,9 +25,9 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBa
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterPortletKeys;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramBackgroundTaskService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
+import jakarta.portlet.*;
 import java.io.IOException;
 import java.util.ArrayList;
-import javax.portlet.*;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -42,15 +42,15 @@ import org.osgi.service.component.annotations.Reference;
       "com.liferay.portlet.remoteable=false",
       "com.liferay.portlet.render-weight=50",
       "com.liferay.portlet.use-default-template=true",
-      "javax.portlet.display-name=Koulutustarjonta",
-      "javax.portlet.expiration-cache=0",
-      "javax.portlet.init-param.always-display-default-configuration-icons=true",
-      "javax.portlet.init-param.view-template=/view.jsp",
-      "javax.portlet.name=" + StudyProgramImporterPortletKeys.STUDY_PROGRAM_IMPORTER,
-      "javax.portlet.resource-bundle=content.Language",
-      "javax.portlet.security-role-ref=administrator,power-user",
-      "javax.portlet.supports.mime-type=text/html",
-      "javax.portlet.supported-locale=en_US,fi_FI"
+      "jakarta.portlet.display-name=Koulutustarjonta",
+      "jakarta.portlet.expiration-cache=0",
+      "jakarta.portlet.init-param.always-display-default-configuration-icons=true",
+      "jakarta.portlet.init-param.view-template=/view.jsp",
+      "jakarta.portlet.name=" + StudyProgramImporterPortletKeys.STUDY_PROGRAM_IMPORTER,
+      "jakarta.portlet.resource-bundle=content.Language",
+      "jakarta.portlet.security-role-ref=administrator,power-user",
+      "jakarta.portlet.supports.mime-type=text/html",
+      "jakarta.portlet.supported-locale=en_US,fi_FI"
     },
     service = Portlet.class)
 public class StudyProgramImporterPortlet extends MVCPortlet {

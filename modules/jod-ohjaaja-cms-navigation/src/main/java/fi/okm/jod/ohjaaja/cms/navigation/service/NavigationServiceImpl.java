@@ -44,6 +44,7 @@ import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationItemDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -54,8 +55,6 @@ import org.osgi.service.component.annotations.Reference;
 
 @Component(immediate = true, service = NavigationService.class)
 public class NavigationServiceImpl implements NavigationService {
-
-  private static final Long GROUP_ID = 20117L; // JOD OHJAAJA group ID
 
   private static final String ASSET_CATEGORY_CLASS_NAME =
       "com.liferay.asset.kernel.model.AssetCategory";
@@ -79,10 +78,13 @@ public class NavigationServiceImpl implements NavigationService {
   @Reference private JournalArticleService journalArticleService;
   @Reference private JournalArticleResourceLocalService journalArticleResourceLocalService;
   @Reference private SAPEntryLocalService sapEntryLocalService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   @Override
   public NavigationDto getNavigation(Long siteId, String languageId) {
-    var siteNavigationMenus = siteNavigationMenuService.getSiteNavigationMenus(GROUP_ID);
+    var siteNavigationMenus =
+        siteNavigationMenuService.getSiteNavigationMenus(
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
 
     if (!siteNavigationMenus.isEmpty()) {
       return toNavigationDto(siteNavigationMenus.getFirst(), languageId);
@@ -111,7 +113,7 @@ public class NavigationServiceImpl implements NavigationService {
       siteNavigationMenuItemLocalService.addOrUpdateSiteNavigationMenuItem(
           studyProgramJournalArticle.getExternalReferenceCode(),
           serviceContext.getUserId(),
-          GROUP_ID,
+          jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
           studyProgramsParentMenuItem.getSiteNavigationMenuId(),
           studyProgramsParentMenuItem.getSiteNavigationMenuItemId(),
           JournalArticle.class.getName(),
@@ -137,12 +139,14 @@ public class NavigationServiceImpl implements NavigationService {
       throws PortalException {
 
     siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(
-        externalReferenceCode, GROUP_ID);
+        externalReferenceCode, jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
   }
 
   public SiteNavigationMenuItem getStudyProgramsParentMenuItem()
       throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection {
-    var siteNavigationMenus = siteNavigationMenuService.getSiteNavigationMenus(GROUP_ID);
+    var siteNavigationMenus =
+        siteNavigationMenuService.getSiteNavigationMenus(
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     if (siteNavigationMenus.isEmpty()) {
       throw new StudyProgramListingMissingException("No site navigation menus found");
     }

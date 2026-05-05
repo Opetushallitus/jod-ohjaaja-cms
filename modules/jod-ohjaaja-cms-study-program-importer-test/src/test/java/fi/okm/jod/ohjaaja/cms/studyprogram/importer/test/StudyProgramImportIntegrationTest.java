@@ -23,6 +23,7 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramBackgroundTaskService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -49,8 +50,6 @@ public class StudyProgramImportIntegrationTest {
   @Rule
   public static final AggregateTestRule aggregateTestRule = new LiferayIntegrationTestRule();
 
-  private static final long TEST_GROUP_ID = 20117L;
-
   private static BundleContext bundleContext;
   private static StudyProgramService studyProgramService;
   private static JournalArticleLocalService journalArticleLocalService;
@@ -58,6 +57,7 @@ public class StudyProgramImportIntegrationTest {
   private static KonfoClient konfoClient;
   private static PermissionChecker originalPermissionChecker;
   private static ServiceRegistration<KonfoClient> mockServiceRegistration;
+  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   private static List<String> allCreatedArticleIds = new ArrayList<>();
 
@@ -74,12 +74,12 @@ public class StudyProgramImportIntegrationTest {
     props.put("service.ranking", 1000);
     mockServiceRegistration = bundleContext.registerService(
         KonfoClient.class, mockKonfoClient, props);
-    
+
     System.out.println("✅ MockKonfoClient registered as OSGi service with ranking 1000");
 
     // Wait a moment for service registration to propagate
     Thread.sleep(500);
-
+    jodOhjaajaCmsUtil = getService(JodOhjaajaCmsUtil.class);
     studyProgramService = getService(StudyProgramService.class);
     journalArticleLocalService = getService(JournalArticleLocalService.class);
     backgroundTaskService = getService(StudyProgramBackgroundTaskService.class);
@@ -88,7 +88,7 @@ public class StudyProgramImportIntegrationTest {
     System.out.println("✅ KonfoClient type: " + konfoClient.getClass().getName());
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    
+
     var permissionCheckerFactory = getService(PermissionCheckerFactory.class);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
@@ -102,10 +102,10 @@ public class StudyProgramImportIntegrationTest {
       System.out.println("✅ MockKonfoClient service unregistered");
     }
     PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-    
+
     // Note: Articles are NOT automatically deleted to allow inspection
     // They can be manually cleaned up or will be removed when container restarts
-    System.out.println("\n=== Test completed. " + allCreatedArticleIds.size() + 
+    System.out.println("\n=== Test completed. " + allCreatedArticleIds.size() +
         " articles remain for inspection ===");
   }
 
@@ -132,7 +132,7 @@ public class StudyProgramImportIntegrationTest {
     // Check if import is already running - if so, wait for it
     if (backgroundTaskService.isAnyImportOrDeleteTaskRunning()) {
       System.out.println("⏳ Import already running, waiting for it to complete...");
-      
+
       // Wait up to 60 seconds for the running import to finish
       for (int i = 0; i < 60; i++) {
         Thread.sleep(1000);
@@ -143,7 +143,7 @@ public class StudyProgramImportIntegrationTest {
           return;
         }
       }
-      
+
       Assert.fail("Import task did not complete within 60 seconds (was already running)");
       return;
     }
@@ -152,7 +152,7 @@ public class StudyProgramImportIntegrationTest {
     BackgroundTask task = backgroundTaskService.startImportTask(TestPropsValues.getUserId());
     long taskId = task.getBackgroundTaskId();
     System.out.println("🚀 Started import task ID: " + taskId);
-    
+
     // Wait for completion
     for (int i = 0; i < 60; i++) {
       Thread.sleep(1000);
@@ -165,7 +165,7 @@ public class StudyProgramImportIntegrationTest {
         return;
       }
     }
-    
+
     Assert.fail("Import task did not complete within 60 seconds");
   }
 
@@ -173,7 +173,7 @@ public class StudyProgramImportIntegrationTest {
   public void shouldImportStudyProgramsUsingMockClient() throws Exception {
     System.out.println("\n=== Testing Import via startImportTask() with MockKonfoClient ===");
 
-    Assert.assertTrue("KonfoClient should be MockKonfoClient", 
+    Assert.assertTrue("KonfoClient should be MockKonfoClient",
         konfoClient instanceof MockKonfoClient);
 
     int initialCount = studyProgramService.getImportedStudyPrograms().size();
@@ -184,27 +184,27 @@ public class StudyProgramImportIntegrationTest {
 
     // Run import
     runImportAndWait();
-    
+
     for (int i = 1; i <= expectedCount; i++) {
       String oid = "1.2.246.562.20.0000000000" + i;
       JournalArticle article = journalArticleLocalService
-          .fetchLatestArticleByExternalReferenceCode(TEST_GROUP_ID, oid);
-      
+          .fetchLatestArticleByExternalReferenceCode(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), oid);
+
       if (article != null) {
         createdArticleIds.add(oid);
         System.out.println("✅ Article imported: " + article.getTitle("fi_FI") + " (OID: " + oid + ")");
-        
+
         // Verify article content for first article
         if (i == 1) {
           String fiTitle = article.getTitle("fi_FI");
           Assert.assertNotNull("Finnish title should exist", fiTitle);
           Assert.assertTrue("Title should not be empty", fiTitle.length() > 0);
-          
+
           String content = article.getContent();
           Assert.assertNotNull("Content should not be null", content);
           Assert.assertFalse("Content should not be empty", content.isEmpty());
-          
-          System.out.println("   ✅ Article content verified - Title: " + fiTitle + 
+
+          System.out.println("   ✅ Article content verified - Title: " + fiTitle +
               ", Content length: " + content.length() + " chars");
         }
       }

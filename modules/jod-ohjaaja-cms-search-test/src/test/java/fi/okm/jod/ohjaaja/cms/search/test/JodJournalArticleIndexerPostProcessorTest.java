@@ -47,6 +47,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Set;
+
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -75,13 +77,13 @@ public class JodJournalArticleIndexerPostProcessorTest {
   public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
 
-  private static final long TEST_GROUP_ID = 20117L;
-
   private static BundleContext bundleContext;
   private static PermissionChecker originalPermissionChecker;
   private static JournalArticleLocalService journalArticleLocalService;
   private static DDMStructureLocalService ddmStructureLocalService;
+  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
   private static IndexerRegistry indexerRegistry;
+  private static Long TEST_GROUP_ID;
 
   private JournalArticle testArticle;
   private DDMStructure testStructure;
@@ -103,7 +105,8 @@ public class JodJournalArticleIndexerPostProcessorTest {
     journalArticleLocalService = getService(JournalArticleLocalService.class);
     ddmStructureLocalService = getService(DDMStructureLocalService.class);
     indexerRegistry = getService(IndexerRegistry.class);
-
+    jodOhjaajaCmsUtil = getService(JodOhjaajaCmsUtil.class);
+    TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
 
   }
 
@@ -130,6 +133,8 @@ public class JodJournalArticleIndexerPostProcessorTest {
       }
     }
   }
+
+
 
   private static <T> T getService(Class<T> serviceClass) {
     var reference = bundleContext.getServiceReference(serviceClass);

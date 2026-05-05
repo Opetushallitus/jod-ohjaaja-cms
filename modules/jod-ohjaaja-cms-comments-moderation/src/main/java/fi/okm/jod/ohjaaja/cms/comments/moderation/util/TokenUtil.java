@@ -10,7 +10,7 @@
 package fi.okm.jod.ohjaaja.cms.comments.moderation.util;
 
 import com.liferay.portal.kernel.util.PortalUtil;
-import javax.portlet.PortletRequest;
+import jakarta.portlet.PortletRequest;
 
 public class TokenUtil {
   public static String getToken(PortletRequest portletRequest) {

@@ -14,6 +14,7 @@ import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.service.GroupLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.test.util.ServiceContextTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
@@ -25,6 +26,7 @@ import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -44,10 +46,8 @@ import org.osgi.framework.ServiceReference;
 public class NavigationServiceTest {
 
   @ClassRule @Rule
-  public static final LiferayIntegrationTestRule liferayIntegrationTestRule = 
+  public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
-
-  private static final long TEST_GROUP_ID = 20117L;
 
   private static NavigationService navigationService;
   private static BundleContext bundleContext;
@@ -56,6 +56,8 @@ public class NavigationServiceTest {
   private static SiteNavigationMenu testNavigationMenu;
   private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
   private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  private static Long TEST_GROUP_ID;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
@@ -65,10 +67,11 @@ public class NavigationServiceTest {
     if (serviceReference != null) {
       navigationService = bundleContext.getService(serviceReference);
     }
-
+    jodOhjaajaCmsUtil = bundleContext.getService(bundleContext.getServiceReference(JodOhjaajaCmsUtil.class));
+    TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     // Set up permissions
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    var permissionCheckerFactoryRef = 
+    var permissionCheckerFactoryRef =
         bundleContext.getServiceReference(PermissionCheckerFactory.class);
     var permissionCheckerFactory = bundleContext.getService(permissionCheckerFactoryRef);
     User adminUser = TestPropsValues.getUser();
@@ -77,11 +80,11 @@ public class NavigationServiceTest {
     bundleContext.ungetService(permissionCheckerFactoryRef);
 
     // Get services
-    var menuLocalServiceRef = 
+    var menuLocalServiceRef =
         bundleContext.getServiceReference(SiteNavigationMenuLocalService.class);
     siteNavigationMenuLocalService = bundleContext.getService(menuLocalServiceRef);
 
-    var menuItemLocalServiceRef = 
+    var menuItemLocalServiceRef =
         bundleContext.getServiceReference(SiteNavigationMenuItemLocalService.class);
     siteNavigationMenuItemLocalService = bundleContext.getService(menuItemLocalServiceRef);
 
@@ -121,7 +124,7 @@ public class NavigationServiceTest {
         serviceContext
     );
 
-    System.out.println("✅ Created test navigation menu: " + 
+    System.out.println("✅ Created test navigation menu: " +
         testNavigationMenu.getSiteNavigationMenuId());
 
     // Create parent menu item with StudyProgramsListing custom field
@@ -178,10 +181,10 @@ public class NavigationServiceTest {
       SiteNavigationMenuItem parentMenuItem = navigationService.getStudyProgramsParentMenuItem();
 
       Assert.assertNotNull("Parent menu item should not be null", parentMenuItem);
-      Assert.assertTrue("Parent menu item ID should be positive", 
+      Assert.assertTrue("Parent menu item ID should be positive",
           parentMenuItem.getSiteNavigationMenuItemId() > 0);
-      
-      System.out.println("✅ Parent menu item found: ID=" + 
+
+      System.out.println("✅ Parent menu item found: ID=" +
           parentMenuItem.getSiteNavigationMenuItemId());
     } catch (StudyProgramListingMissingException e) {
       System.out.println("⚠️  Expected in test environment without custom field setup");
@@ -199,9 +202,9 @@ public class NavigationServiceTest {
 
     Assert.assertNotNull("English navigation should not be null", navigationEN);
     Assert.assertNotNull("Finnish navigation should not be null", navigationFI);
-    Assert.assertNotNull("English navigation items should not be null", 
+    Assert.assertNotNull("English navigation items should not be null",
         navigationEN.navigationItems());
-    Assert.assertNotNull("Finnish navigation items should not be null", 
+    Assert.assertNotNull("Finnish navigation items should not be null",
         navigationFI.navigationItems());
 
     System.out.println("✅ EN navigation: " + navigationEN.navigationItems().size() + " items");

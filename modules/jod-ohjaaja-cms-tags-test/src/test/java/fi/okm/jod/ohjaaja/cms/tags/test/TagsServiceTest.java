@@ -7,6 +7,8 @@ import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
 import java.util.List;
 import java.util.Map;
+
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -31,7 +33,7 @@ public class TagsServiceTest {
   private static TagsService tagsService;
   private static BundleContext bundleContext;
   private static ServiceReference<TagsService> serviceReference;
-  private static final long TEST_SITE_ID = 20117L;
+  private static Long TEST_GROUP_ID;
 
   @BeforeClass
   public static void setUpClass() {
@@ -41,6 +43,8 @@ public class TagsServiceTest {
     if (serviceReference != null) {
       tagsService = bundleContext.getService(serviceReference);
     }
+    var jodOhjaajaCmsUtil = bundleContext.getService(bundleContext.getServiceReference(JodOhjaajaCmsUtil.class));
+    TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
   }
 
   @AfterClass
@@ -58,9 +62,9 @@ public class TagsServiceTest {
 
     System.out.println("Creating new category: " + testERC);
 
-    tagsService.addOrUpdateJodTaxonomyCategory(null, testERC, testName, translations, TEST_SITE_ID);
+    tagsService.addOrUpdateJodTaxonomyCategory(null, testERC, testName, translations, TEST_GROUP_ID);
 
-    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     boolean found = categories.stream()
         .anyMatch(cat -> testERC.equals(cat.externalReferenceCode()));
 
@@ -77,10 +81,10 @@ public class TagsServiceTest {
     // Create category
     System.out.println("Creating category for update test: " + testERC);
     tagsService.addOrUpdateJodTaxonomyCategory(
-        null, testERC, initialName, Map.of("en_US", initialName), TEST_SITE_ID);
+        null, testERC, initialName, Map.of("en_US", initialName), TEST_GROUP_ID);
 
     // Find created category
-    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     JodTaxonomyCategoryDto createdCategory = categories.stream()
         .filter(cat -> testERC.equals(cat.externalReferenceCode()))
         .findFirst()
@@ -96,10 +100,10 @@ public class TagsServiceTest {
         testERC,
         updatedName,
         Map.of("en_US", updatedName, "fi_FI", "Päivitetty"),
-        TEST_SITE_ID);
+        TEST_GROUP_ID);
 
     // Verify update
-    categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     JodTaxonomyCategoryDto updatedCategory = categories.stream()
         .filter(cat -> testERC.equals(cat.externalReferenceCode()))
         .findFirst()
@@ -107,7 +111,7 @@ public class TagsServiceTest {
 
     Assert.assertNotNull("Updated category should exist", updatedCategory);
     Assert.assertEquals("Name should be updated", updatedName, updatedCategory.name());
-    Assert.assertEquals("Category ID should remain same", 
+    Assert.assertEquals("Category ID should remain same",
         createdCategory.id(), updatedCategory.id());
     System.out.println("✅ Category updated successfully");
   }
@@ -118,26 +122,26 @@ public class TagsServiceTest {
     var testERC2 = "test-list-2-" + System.currentTimeMillis();
 
     System.out.println("Creating categories for list test");
-    
-    int initialCount = tagsService.getJodTaxonomyCategories(TEST_SITE_ID).size();
-    
-    tagsService.addOrUpdateJodTaxonomyCategory(
-        null, testERC1, "Category 1", Map.of("en_US", "Category 1"), TEST_SITE_ID);
-    tagsService.addOrUpdateJodTaxonomyCategory(
-        null, testERC2, "Category 2", Map.of("en_US", "Category 2"), TEST_SITE_ID);
 
-    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    int initialCount = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID).size();
+
+    tagsService.addOrUpdateJodTaxonomyCategory(
+        null, testERC1, "Category 1", Map.of("en_US", "Category 1"), TEST_GROUP_ID);
+    tagsService.addOrUpdateJodTaxonomyCategory(
+        null, testERC2, "Category 2", Map.of("en_US", "Category 2"), TEST_GROUP_ID);
+
+    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
 
     Assert.assertNotNull("Categories list should not be null", categories);
-    Assert.assertTrue("Should have at least 2 more categories", 
+    Assert.assertTrue("Should have at least 2 more categories",
         categories.size() >= initialCount + 2);
-    
+
     boolean found1 = categories.stream().anyMatch(c -> testERC1.equals(c.externalReferenceCode()));
     boolean found2 = categories.stream().anyMatch(c -> testERC2.equals(c.externalReferenceCode()));
-    
+
     Assert.assertTrue("First category should be in list", found1);
     Assert.assertTrue("Second category should be in list", found2);
-    
+
     System.out.println("✅ Found " + categories.size() + " categories total");
   }
 
@@ -153,9 +157,9 @@ public class TagsServiceTest {
     System.out.println("Creating multilingual category: " + testERC);
 
     tagsService.addOrUpdateJodTaxonomyCategory(
-        null, testERC, "English Name", translations, TEST_SITE_ID);
+        null, testERC, "English Name", translations, TEST_GROUP_ID);
 
-    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     JodTaxonomyCategoryDto category = categories.stream()
         .filter(cat -> testERC.equals(cat.externalReferenceCode()))
         .findFirst()
@@ -172,9 +176,9 @@ public class TagsServiceTest {
 
     // Create category
     tagsService.addOrUpdateJodTaxonomyCategory(
-        null, testERC, "Original", Map.of("en_US", "Original"), TEST_SITE_ID);
+        null, testERC, "Original", Map.of("en_US", "Original"), TEST_GROUP_ID);
 
-    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    List<JodTaxonomyCategoryDto> categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     JodTaxonomyCategoryDto original = categories.stream()
         .filter(cat -> testERC.equals(cat.externalReferenceCode()))
         .findFirst()
@@ -182,9 +186,9 @@ public class TagsServiceTest {
 
     // Update with same ERC
     tagsService.addOrUpdateJodTaxonomyCategory(
-        original.id(), testERC, "Modified", Map.of("en_US", "Modified"), TEST_SITE_ID);
+        original.id(), testERC, "Modified", Map.of("en_US", "Modified"), TEST_GROUP_ID);
 
-    categories = tagsService.getJodTaxonomyCategories(TEST_SITE_ID);
+    categories = tagsService.getJodTaxonomyCategories(TEST_GROUP_ID);
     JodTaxonomyCategoryDto updated = categories.stream()
         .filter(cat -> testERC.equals(cat.externalReferenceCode()))
         .findFirst()

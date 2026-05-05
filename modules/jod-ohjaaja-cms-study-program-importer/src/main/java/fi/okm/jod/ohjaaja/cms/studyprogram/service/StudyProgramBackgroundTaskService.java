@@ -22,8 +22,8 @@ import com.liferay.portal.kernel.service.UserLocalService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.BaseStudyProgramBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.DeleteImportedStudyProgramsBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
-import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,10 +41,12 @@ public class StudyProgramBackgroundTaskService {
 
   @Reference private UserLocalService userLocalService;
 
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+
   public boolean isAnyImportOrDeleteTaskRunning() {
     var tasks =
         BackgroundTaskManagerUtil.getBackgroundTasks(
-            StudyProgramImporterConstants.JOD_GROUP_ID,
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
             new String[] {
               ImportStudyProgramsBackgroundTaskExecutor.class.getName(),
               DeleteImportedStudyProgramsBackgroundTaskExecutor.class.getName()
@@ -78,7 +80,7 @@ public class StudyProgramBackgroundTaskService {
     }
     audit(taskName, userId);
     ServiceContext serviceContext = new ServiceContext();
-    serviceContext.setScopeGroupId(StudyProgramImporterConstants.JOD_GROUP_ID);
+    serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     serviceContext.setUserId(userId);
 
     var taskContextMap = new HashMap<String, Serializable>();
@@ -86,7 +88,7 @@ public class StudyProgramBackgroundTaskService {
 
     return BackgroundTaskManagerUtil.addBackgroundTask(
         userId,
-        StudyProgramImporterConstants.JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         taskName,
         executorClass.getName(),
         taskContextMap,

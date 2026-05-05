@@ -22,11 +22,11 @@ import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.service.CommentsModerationService;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.service.FeatureFlagsService;
+import jakarta.portlet.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import javax.portlet.*;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -40,15 +40,15 @@ import org.osgi.service.component.annotations.Reference;
       "com.liferay.portlet.remoteable=false",
       "com.liferay.portlet.render-weight=50",
       "com.liferay.portlet.use-default-template=true",
-      "javax.portlet.display-name=Moderointi",
-      "javax.portlet.expiration-cache=0",
-      "javax.portlet.init-param.always-display-default-configuration-icons=true",
-      "javax.portlet.init-param.view-template=/view.jsp",
-      "javax.portlet.name=" + CommentsModerationPortletKeys.COMMENTS_MODERATION,
-      "javax.portlet.resource-bundle=content.Language",
-      "javax.portlet.security-role-ref=administrator,power-user",
-      "javax.portlet.supports.mime-type=text/html",
-      "javax.portlet.supported-locale=en_US,fi_FI"
+      "jakarta.portlet.display-name=Moderointi",
+      "jakarta.portlet.expiration-cache=0",
+      "jakarta.portlet.init-param.always-display-default-configuration-icons=true",
+      "jakarta.portlet.init-param.view-template=/view.jsp",
+      "jakarta.portlet.name=" + CommentsModerationPortletKeys.COMMENTS_MODERATION,
+      "jakarta.portlet.resource-bundle=content.Language",
+      "jakarta.portlet.security-role-ref=administrator,power-user",
+      "jakarta.portlet.supports.mime-type=text/html",
+      "jakarta.portlet.supported-locale=en_US,fi_FI"
     },
     service = Portlet.class)
 public class CommentsModerationPortlet extends MVCPortlet {

@@ -27,7 +27,7 @@ public class StudyProgramImporterPanelApp extends BasePanelApp {
 
   @Reference(
       target =
-          "(javax.portlet.name=" + StudyProgramImporterPortletKeys.STUDY_PROGRAM_IMPORTER + ")")
+          "(jakarta.portlet.name=" + StudyProgramImporterPortletKeys.STUDY_PROGRAM_IMPORTER + ")")
   private Portlet portlet;
 
   @Override

@@ -14,8 +14,8 @@ import static fi.okm.jod.ohjaaja.cms.comments.moderation.util.TokenUtil.getToken
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.Feature;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.client.FeaturesApiClient;
 import fi.okm.jod.ohjaaja.cms.comments.moderation.dto.FeatureFlagDto;
+import jakarta.portlet.PortletRequest;
 import java.util.List;
-import javax.portlet.PortletRequest;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 

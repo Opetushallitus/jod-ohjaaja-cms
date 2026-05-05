@@ -6,7 +6,7 @@ Export-Package:\
 	fi.okm.jod.ohjaaja.cms.studyprogram.client,\
 	fi.okm.jod.ohjaaja.cms.studyprogram.dto,\
 	fi.okm.jod.ohjaaja.cms.studyprogram.service
-Web-ContextPath: /jod-ohjaaja-cms-study-program-importer
 Provide-Capability:\
 	liferay.language.resources;\
 		resource.bundle.base.name="content.Language"
+Web-ContextPath: /jod-ohjaaja-cms-study-program-importer

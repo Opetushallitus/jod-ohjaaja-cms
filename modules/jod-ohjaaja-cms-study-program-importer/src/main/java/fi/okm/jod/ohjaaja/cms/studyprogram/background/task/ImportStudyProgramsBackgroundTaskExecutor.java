@@ -12,7 +12,6 @@ package fi.okm.jod.ohjaaja.cms.studyprogram.background.task;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.*;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.ENGLISH;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.FINNISH;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.SWEDISH;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.*;
 
@@ -44,12 +43,13 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import jakarta.validation.ValidationException;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-import javax.validation.ValidationException;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -72,6 +72,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
   @Reference private StudyProgramCategoryService studyProgramCategoryService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
   @Reference private NavigationService navigationService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   public ImportStudyProgramsBackgroundTaskExecutor() {
     setIsolationLevel(BackgroundTaskConstants.ISOLATION_LEVEL_COMPANY);
@@ -91,7 +92,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
           "DDM structure with external reference code "
               + EXTERNAL_REFERENCE_CODE
               + " not found in group "
-              + JOD_GROUP_ID);
+              + jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       return new BackgroundTaskResult(
           BackgroundTaskConstants.STATUS_FAILED, "Failed to fetch or create DDM structure.");
     }
@@ -101,7 +102,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
     var studyPrograms = konfoClient.fetchStudyPrograms();
     var user = getUser(PortalUtil.getDefaultCompanyId());
-    var serviceContext = getServiceContext();
+    var serviceContext = getServiceContext(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     var currentStudyProgramArticleExternalReferenceCodes =
         studyProgramImporter.getImportedStudyPrograms().stream()
             .map(JournalArticleModel::getExternalReferenceCode)
@@ -136,11 +137,14 @@ public class ImportStudyProgramsBackgroundTaskExecutor
               try {
                 var journalArticle =
                     journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
-                        JOD_GROUP_ID, externalReferenceCode);
+                        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+                        externalReferenceCode);
                 if (journalArticle != null) {
                   navigationService.deleteStudyProgramNavigationMenuItem(externalReferenceCode);
                   journalArticleLocalService.deleteArticle(
-                      JOD_GROUP_ID, journalArticle.getArticleId(), serviceContext);
+                      jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+                      journalArticle.getArticleId(),
+                      serviceContext);
                   log.info("Deleted study program: " + externalReferenceCode);
                 }
               } catch (PortalException e) {
@@ -164,7 +168,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
       var journalArticle =
           journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
-              JOD_GROUP_ID, studyProgram.oid());
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), studyProgram.oid());
 
       var titleMap =
           Map.of(
@@ -199,7 +203,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
             journalArticleLocalService.addArticle(
                 studyProgram.oid(),
                 user.getUserId(),
-                JOD_GROUP_ID,
+                jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
                 0,
                 titleMap,
                 null,
@@ -338,6 +342,8 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     formValues.addDDMFormFieldValue(
         createLinkFieldsetValue(studyProgram, formValues.getDefaultLocale()));
     return journalConverter.getContent(
-        structure, ddm.getFields(structure.getStructureId(), formValues), JOD_GROUP_ID);
+        structure,
+        ddm.getFields(structure.getStructureId(), formValues),
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
   }
 }

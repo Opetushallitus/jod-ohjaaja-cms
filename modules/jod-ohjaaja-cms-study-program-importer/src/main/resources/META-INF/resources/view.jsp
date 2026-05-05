@@ -1,7 +1,7 @@
 <%@ page import="com.liferay.journal.model.JournalArticle" %>
 <%@ page import="com.liferay.portal.kernel.language.LanguageUtil" %>
-<%@ page import="javax.portlet.PortletURL" %>
-<%@ page import="javax.portlet.ResourceURL" %>
+<%@ page import="jakarta.portlet.PortletURL" %>
+<%@ page import="jakarta.portlet.ResourceURL" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Optional" %>
 <%@ page import="java.util.Date" %>
@@ -47,10 +47,10 @@
 
 
   PortletURL importURL = renderResponse.createActionURL();
-  importURL.setParameter("javax.portlet.action", "importAction");
+  importURL.setParameter("jakarta.portlet.action", "importAction");
 
   PortletURL deleteURL = renderResponse.createActionURL();
-  deleteURL.setParameter("javax.portlet.action", "deleteAllAction");
+  deleteURL.setParameter("jakarta.portlet.action", "deleteAllAction");
 
   String taskId = (String) request.getAttribute("taskId");
   String action = (String) request.getAttribute("current-action");

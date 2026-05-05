@@ -7,7 +7,7 @@
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto" %>
-<%@ page import="javax.portlet.PortletRequest" %>
+<%@ page import="jakarta.portlet.PortletRequest" %>
 <%@ page import="java.sql.Date" %>
 <%@ page import="java.text.DateFormat" %>
 <%@ page import="java.util.ArrayList" %>
@@ -16,7 +16,6 @@
 <%@ page import="java.util.Optional" %>
 <%@ page import="com.liferay.portal.kernel.util.ParamUtil" %>
 <%@ taglib prefix="clay" uri="http://liferay.com/tld/clay" %>
-<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
 <%@include file="init.jsp" %>
 <%
   List<CommentReportSummaryDto> commentReportSummaries = Optional.ofNullable(request.getAttribute("commentReportSummaries")).filter(attr -> attr instanceof List<?>)
@@ -32,7 +31,7 @@
 
   boolean commentsEnabled = Boolean.TRUE.equals(request.getAttribute("commentsEnabled"));
   String ohjaajaArticleShortUrlPrefix = (String) request.getAttribute("ohjaajaArticleShortUrlPrefix");
-  PortletRequest portletRequest = (PortletRequest) request.getAttribute("javax.portlet.request");
+  PortletRequest portletRequest = (PortletRequest) request.getAttribute("jakarta.portlet.request");
 
   Locale userLocale = themeDisplay.getLocale();
   DateFormat dateFormat = DateFormatFactoryUtil.getDateTime(userLocale, timeZone);

@@ -2,8 +2,12 @@ plugins {
   id "com.diffplug.spotless" version "7.0.2"
 }
 dependencies {
-	compileOnly group: "com.liferay.portal", name: "release.portal.api", version: "latest.release"
+  compileOnly group: "com.liferay.portal", name: "release.dxp.api"
   compileOnly group: "org.osgi", name: "org.osgi.service.jaxrs", version: "latest.release"
+  compileOnly group: "javax.ws.rs", name: "javax.ws.rs-api", version: "2.1"
+  compileOnly group: "javax.validation", name: "validation-api", version: "2.0.1.Final"
+  compileOnly group: "javax.servlet", name: "javax.servlet-api", version: "3.1.0"
+  compileOnly project(":modules:jod-ohjaaja-cms-util")
 }
 spotless {
   java {
