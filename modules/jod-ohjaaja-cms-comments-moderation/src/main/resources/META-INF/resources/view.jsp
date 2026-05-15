@@ -16,7 +16,6 @@
 <%@ page import="java.util.Optional" %>
 <%@ page import="com.liferay.portal.kernel.util.ParamUtil" %>
 <%@ taglib prefix="clay" uri="http://liferay.com/tld/clay" %>
-<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
 <%@include file="init.jsp" %>
 <%
   List<CommentReportSummaryDto> commentReportSummaries = Optional.ofNullable(request.getAttribute("commentReportSummaries")).filter(attr -> attr instanceof List<?>)

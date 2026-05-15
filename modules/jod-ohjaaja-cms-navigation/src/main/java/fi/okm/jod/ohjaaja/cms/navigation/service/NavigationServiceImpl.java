@@ -11,6 +11,7 @@ package fi.okm.jod.ohjaaja.cms.navigation.service;
 
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.asset.kernel.service.AssetCategoryService;
+import com.liferay.expando.kernel.model.ExpandoBridge;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
 import com.liferay.expando.kernel.util.ExpandoBridgeFactoryUtil;
 import com.liferay.journal.model.JournalArticle;
@@ -32,6 +33,7 @@ import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.UnicodeProperties;
 import com.liferay.portal.kernel.util.UnicodePropertiesBuilder;
+import com.liferay.portal.language.override.service.PLOEntryLocalService;
 import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.site.navigation.model.SiteNavigationMenu;
@@ -44,6 +46,7 @@ import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationItemDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication;
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -67,9 +70,65 @@ public class NavigationServiceImpl implements NavigationService {
       Map.of(LocaleUtil.fromLanguageId("en_US"), "Public access JOD OHJAAJA NAVIGATION");
   private static final String SERVICE_SIGNATURE = NavigationRestApplication.class.getName() + "#*";
 
-  private static final String CUSTOM_FIELD_NAME = "Type";
-  private static final String[] CUSTOM_FIELD_DEFAULT_DATA =
-      new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"};
+  private static final String TYPE_CUSTOM_FIELD_NAME = "Type";
+  private static final String HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME =
+      "hideFromHomePageNewestCarousel";
+  private static final String HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME =
+      "hideFromHomePageMostViewedCarousel";
+  private static final String HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME =
+      "hideFromMainCategoryPageNewestCarousel";
+  private static final String HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME =
+      "hideFromMainCategoryPageMostViewedCarousel";
+
+  private static final CustomFieldData[] CUSTOM_FIELDS =
+      new CustomFieldData[] {
+        new CustomFieldData(
+            TYPE_CUSTOM_FIELD_NAME,
+            ExpandoColumnConstants.STRING_ARRAY,
+            new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"},
+            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
+            Map.of("fi_FI", "Tyyppi", "en_US", "Type")),
+        new CustomFieldData(
+            HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
+            ExpandoColumnConstants.BOOLEAN,
+            false,
+            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+            Map.of(
+                "fi_FI",
+                "Piilota uusien karusellista etusivulta",
+                "en_US",
+                "Hide from the homepage new items carousel")),
+        new CustomFieldData(
+            HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
+            ExpandoColumnConstants.BOOLEAN,
+            false,
+            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+            Map.of(
+                "fi_FI",
+                "Piilota suosittujen karusellista etusivulta",
+                "en_US",
+                "Hide from the homepage most viewed carousel")),
+        new CustomFieldData(
+            HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
+            ExpandoColumnConstants.BOOLEAN,
+            false,
+            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+            Map.of(
+                "fi_FI",
+                "Piilota uusien karusellista pääkategoriasivulta",
+                "en_US",
+                "Hide from the main category page new items carousel")),
+        new CustomFieldData(
+            HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
+            ExpandoColumnConstants.BOOLEAN,
+            false,
+            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+            Map.of(
+                "fi_FI",
+                "Piilota suosittujen karusellista pääkategoriasivulta",
+                "en_US",
+                "Hide from the main category page most viewed carousel"))
+      };
 
   private static final Log log = LogFactoryUtil.getLog(NavigationServiceImpl.class);
 
@@ -79,6 +138,7 @@ public class NavigationServiceImpl implements NavigationService {
   @Reference private JournalArticleService journalArticleService;
   @Reference private JournalArticleResourceLocalService journalArticleResourceLocalService;
   @Reference private SAPEntryLocalService sapEntryLocalService;
+  @Reference private PLOEntryLocalService ploEntryLocalService;
 
   @Override
   public NavigationDto getNavigation(Long siteId, String languageId) {
@@ -98,7 +158,7 @@ public class NavigationServiceImpl implements NavigationService {
     } catch (PortalException portalException) {
       initServiceAccessPolicy();
     }
-    initCustomField();
+    initCustomFields();
   }
 
   @Override
@@ -154,7 +214,7 @@ public class NavigationServiceImpl implements NavigationService {
 
     var studyProgramsListingMenuItems =
         menuItems.stream()
-            .filter(menuItem -> "StudyProgramsListing".equals(getCustomFieldValue(menuItem)))
+            .filter(menuItem -> "StudyProgramsListing".equals(getTypeCustomFieldValue(menuItem)))
             .toList();
     if (studyProgramsListingMenuItems.isEmpty()) {
       throw new StudyProgramListingMissingException(
@@ -166,11 +226,11 @@ public class NavigationServiceImpl implements NavigationService {
     return studyProgramsListingMenuItems.getFirst();
   }
 
-  private String getCustomFieldValue(SiteNavigationMenuItem siteNavigationMenuItem) {
+  private String getTypeCustomFieldValue(SiteNavigationMenuItem siteNavigationMenuItem) {
     var expandoBridge = siteNavigationMenuItem.getExpandoBridge();
     var attributes = expandoBridge.getAttributes(false);
-    if (attributes.containsKey(CUSTOM_FIELD_NAME)
-        && attributes.get(CUSTOM_FIELD_NAME) instanceof String[] customFieldData
+    if (attributes.containsKey(TYPE_CUSTOM_FIELD_NAME)
+        && attributes.get(TYPE_CUSTOM_FIELD_NAME) instanceof String[] customFieldData
         && customFieldData.length > 0) {
       return customFieldData[0];
     }
@@ -223,6 +283,14 @@ public class NavigationServiceImpl implements NavigationService {
         description,
         descriptionI18n,
         getType(siteNavigationMenuItem, type),
+        getBooleanCustomFieldValue(
+            siteNavigationMenuItem, HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME),
+        getBooleanCustomFieldValue(
+            siteNavigationMenuItem, HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME),
+        getBooleanCustomFieldValue(
+            siteNavigationMenuItem, HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME),
+        getBooleanCustomFieldValue(
+            siteNavigationMenuItem, HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME),
         assetCategory != null
             ? assetCategory.getExternalReferenceCode()
             : (journalArticle != null)
@@ -340,6 +408,16 @@ public class NavigationServiceImpl implements NavigationService {
     };
   }
 
+  private boolean getBooleanCustomFieldValue(
+      SiteNavigationMenuItem siteNavigationMenuItem, String fieldName) {
+    var expandoBridge = siteNavigationMenuItem.getExpandoBridge();
+    var attributes = expandoBridge.getAttributes(false);
+    if (attributes.containsKey(fieldName) && attributes.get(fieldName) instanceof Boolean value) {
+      return value;
+    }
+    return false;
+  }
+
   private String getType(
       SiteNavigationMenuItem siteNavigationMenuItem,
       SiteNavigationMenuItemType siteNavigationMenuItemType) {
@@ -348,8 +426,8 @@ public class NavigationServiceImpl implements NavigationService {
         var expandoBridge = siteNavigationMenuItem.getExpandoBridge();
         var attributes = expandoBridge.getAttributes(false);
 
-        yield attributes.containsKey(CUSTOM_FIELD_NAME)
-                && attributes.get(CUSTOM_FIELD_NAME) instanceof String[] customFieldData
+        yield attributes.containsKey(TYPE_CUSTOM_FIELD_NAME)
+                && attributes.get(TYPE_CUSTOM_FIELD_NAME) instanceof String[] customFieldData
                 && customFieldData.length > 0
             ? customFieldData[0]
             : "CategoryListing";
@@ -374,7 +452,7 @@ public class NavigationServiceImpl implements NavigationService {
     }
   }
 
-  private void initCustomField() {
+  private void initCustomFields() {
     try {
       var role =
           RoleLocalServiceUtil.fetchRole(
@@ -393,30 +471,62 @@ public class NavigationServiceImpl implements NavigationService {
           ExpandoBridgeFactoryUtil.getExpandoBridge(
               PortalUtil.getDefaultCompanyId(), SiteNavigationMenuItem.class.getName());
 
-      if (expandoBridge.getAttributes().containsKey(CUSTOM_FIELD_NAME)) {
-        log.info("Custom field already exists");
-        expandoBridge.setAttributeDefault(CUSTOM_FIELD_NAME, CUSTOM_FIELD_DEFAULT_DATA);
-      } else {
-        expandoBridge.addAttribute(
-            CUSTOM_FIELD_NAME,
-            ExpandoColumnConstants.STRING_ARRAY,
-            CUSTOM_FIELD_DEFAULT_DATA,
-            false);
-        var unicodeProperties = getUnicodeProperties();
-        expandoBridge.setAttributeProperties(CUSTOM_FIELD_NAME, unicodeProperties, false);
-        log.info("Added custom field");
+      for (var customFieldData : CUSTOM_FIELDS) {
+        initCustomField(
+            expandoBridge,
+            customFieldData.name(),
+            customFieldData.type(),
+            customFieldData.defaultValue(),
+            customFieldData.propertyDisplayType());
+
+        customFieldData.localizationMap.forEach(
+            (locale, name) -> {
+              try {
+                ploEntryLocalService.addOrUpdatePLOEntry(
+                    PortalUtil.getDefaultCompanyId(),
+                    user.getUserId(),
+                    customFieldData.name(),
+                    locale,
+                    name);
+              } catch (PortalException e) {
+                log.error(
+                    "Failed to add or update PLO entry for custom field "
+                        + customFieldData.name()
+                        + " and locale "
+                        + locale,
+                    e);
+              }
+            });
       }
+
     } catch (PortalException e) {
       throw new RuntimeException(e);
     }
   }
 
-  private static UnicodeProperties getUnicodeProperties() {
+  private void initCustomField(
+      ExpandoBridge expandoBridge,
+      String customFieldName,
+      int customFieldType,
+      Serializable customFieldDefaultData,
+      String propertyDisplayType)
+      throws PortalException {
+    if (expandoBridge.getAttributes().containsKey(customFieldName)) {
+      log.info("Custom field " + customFieldName + " already exists");
+      expandoBridge.setAttributeDefault(customFieldName, customFieldDefaultData);
+    } else {
+      expandoBridge.addAttribute(customFieldName, customFieldType, customFieldDefaultData, false);
+      var unicodeProperties = getUnicodeProperties(propertyDisplayType);
+      expandoBridge.setAttributeProperties(customFieldName, unicodeProperties, false);
+      log.info("Added custom field " + customFieldName);
+    }
+  }
+
+  private static UnicodeProperties getUnicodeProperties(String propertyDisplayType) {
     var unicodeProperties = new UnicodeProperties();
     unicodeProperties.setProperty(ExpandoColumnConstants.PROPERTY_HIDDEN, "false");
     unicodeProperties.setProperty(
-        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE,
-        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST);
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE, propertyDisplayType);
     unicodeProperties.setProperty(
         ExpandoColumnConstants.INDEX_TYPE,
         String.valueOf(ExpandoColumnConstants.INDEX_TYPE_KEYWORD));
@@ -431,4 +541,11 @@ public class NavigationServiceImpl implements NavigationService {
     JOURNAL_ARTICLE,
     NOT_RELEVANT
   }
+
+  private record CustomFieldData(
+      String name,
+      int type,
+      Serializable defaultValue,
+      String propertyDisplayType,
+      Map<String, String> localizationMap) {}
 }
