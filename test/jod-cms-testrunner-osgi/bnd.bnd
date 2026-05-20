@@ -1,0 +1,11 @@
+Bundle-Name: JOD CMS Integration Test Runner (OSGi)
+Bundle-SymbolicName: oph.jod.cms.testrunner.osgi
+Bundle-Version: 1.0.0
+Bundle-Description: HTTP endpoint for installing test bundles and dispatching test runs in Liferay.
+
+# Embed the shared JITEF helpers from jod-cms-testrunner-client so we don't need an Import-Package
+# entry for them at runtime. The own osgi.* packages are picked up by bnd's default rules.
+Private-Package: fi.okm.jod.ohjaaja.cms.testrunner.jitef
+
+-sources: false
+-noimportjava: true

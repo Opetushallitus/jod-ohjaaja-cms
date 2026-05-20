@@ -1,0 +1,25 @@
+plugins {
+  id 'java-library'
+  id 'biz.aQute.bnd.builder'
+}
+
+repositories {
+  mavenCentral()
+  maven {
+    url "https://repository.liferay.com/nexus/content/groups/public"
+  }
+}
+
+dependencies {
+  // We only need the shared JITEF helpers from the client module; everything else there is
+  // host-side scaffolding that would pull in JUnit/bnd transitively. Pulling it in as compileOnly
+  // is enough because bnd embeds the jitef package below via Private-Package.
+  compileOnly project(':test:jod-cms-testrunner-client')
+
+  compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
+  compileOnly "org.osgi:org.osgi.core:6.0.0"
+  compileOnly "org.osgi:org.osgi.service.component.annotations:1.5.1"
+  compileOnly "org.osgi:org.osgi.service.http.whiteboard:1.1.1"
+  compileOnly "javax.servlet:javax.servlet-api:3.1.0"
+  compileOnly "org.osgi:org.osgi.service.log:1.5.0"
+}

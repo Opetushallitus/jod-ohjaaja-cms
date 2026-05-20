@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-  compileOnly group: "com.liferay.portal", name: "release.portal.api", version: "latest.release"
+  compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
 }
 
 spotless {

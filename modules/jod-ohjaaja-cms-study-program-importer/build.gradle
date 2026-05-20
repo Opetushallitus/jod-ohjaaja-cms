@@ -2,7 +2,7 @@ plugins {
   id "com.diffplug.spotless" version "7.0.2"
 }
 dependencies {
-	compileOnly group: "com.liferay.portal", name: "release.portal.api"
+	compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
   compileOnly project(":modules:jod-ohjaaja-cms-navigation")
   compileOnly project(":modules:jod-ohjaaja-cms-tags")
 }

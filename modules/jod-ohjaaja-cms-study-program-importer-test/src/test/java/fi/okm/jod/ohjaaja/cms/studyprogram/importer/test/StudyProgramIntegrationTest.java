@@ -9,7 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
-import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
@@ -34,7 +34,7 @@ import org.osgi.framework.ServiceReference;
  * Tests for DDM Structure management.
  * Verifies that study program DDM structures are correctly created and configured.
  */
-@RunWith(Arquillian.class)
+@RunWith(JodInContainerRunner.class)
 public class StudyProgramIntegrationTest {
 
   @ClassRule

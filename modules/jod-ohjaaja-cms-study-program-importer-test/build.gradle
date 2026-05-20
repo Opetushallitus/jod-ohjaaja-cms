@@ -13,32 +13,29 @@ dependencies {
   // Module under test
   testImplementation project(':modules:jod-ohjaaja-cms-study-program-importer')
 
-  // Liferay Arquillian extension - custom runner for in-container tests
-  testImplementation project(':test:arquillian-extension-junit-bridge')
-
-  // Liferay Arquillian connector - manages deployment and communication
-  testImplementation project(':test:arquillian-extension-junit-bridge-connector')
+  // In-container test runner client (replaces the previous Liferay Arquillian bridge fork)
+  testImplementation project(':test:jod-cms-testrunner-client')
 
   // JUnit 4
-  testImplementation group: "junit", name: "junit", version: "4.13.2"
+  testImplementation "junit:junit:4.13.2"
 
   // Awaitility - DSL for awaiting asynchronous operations (replaces Thread.sleep in tests)
   testImplementation group: "org.awaitility", name: "awaitility", version: "4.3.0"
 
   // Liferay APIs (for testing)
-  testImplementation group: "com.liferay.portal", name: "release.portal.api", version: "7.4.3.132-ga132"
-  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.kernel", version: "latest.release"
-  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test", version: "30.0.0"
-  testImplementation group: "com.liferay.portal", name: "com.liferay.portal.test.integration", version: "latest.release"
+  testImplementation "com.liferay.portal:release.portal.api:7.4.3.132"
+  testImplementation "com.liferay.portal:com.liferay.portal.kernel:7.4.3.132"
+  testImplementation "com.liferay.portal:com.liferay.portal.test:28.0.0"
+  testImplementation "com.liferay.portal:com.liferay.portal.test.integration:6.0.36"
 
   // Logging
-  testImplementation group: "org.slf4j", name: "slf4j-api", version: "1.7.36"
-  testImplementation group: "org.slf4j", name: "slf4j-simple", version: "1.7.36"
-  testImplementation group: "org.apache.logging.log4j", name: "log4j-core", version: "2.25.3"
-  testImplementation group: "org.apache.logging.log4j", name: "log4j-api", version: "2.25.3"
+  testImplementation "org.slf4j:slf4j-api:1.7.36"
+  testImplementation "org.slf4j:slf4j-simple:1.7.36"
+  testImplementation "org.apache.logging.log4j:log4j-core:2.25.4"
+  testImplementation "org.apache.logging.log4j:log4j-api:2.25.4"
 
   // OSGi
-  testImplementation group: "org.osgi", name: "org.osgi.core", version: "6.0.0"
+  testImplementation "org.osgi:org.osgi.core:6.0.0"
 }
 
 test {
@@ -56,8 +53,7 @@ test {
     showStandardStreams = true
   }
 
-  systemProperty "arquillian.launch", "liferay"
-  systemProperty "liferay.arquillian.report.host", "172.17.0.1"
+  systemProperty "jod.testrunner.url", System.getProperty("jod.testrunner.url", "http://localhost:8080")
 }
 
 java {

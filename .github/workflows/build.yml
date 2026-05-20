@@ -31,6 +31,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
 
+      - name: Run jod-cms-testrunner-client unit tests
+        run: ./gradlew --no-daemon :test:jod-cms-testrunner-client:test
+
       - name: Test with Gradle
         run: ./gradlew --no-daemon clean testWithDockerContainer
 

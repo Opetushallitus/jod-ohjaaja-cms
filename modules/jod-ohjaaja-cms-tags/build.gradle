@@ -2,8 +2,8 @@ plugins {
   id "com.diffplug.spotless" version "7.0.2"
 }
 dependencies {
-	compileOnly group: "com.liferay.portal", name: "release.portal.api", version: "latest.release"
-  compileOnly group: "org.osgi", name: "org.osgi.service.jaxrs", version: "latest.release"
+	compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
+  compileOnly "org.osgi:org.osgi.service.jaxrs:1.0.1"
 }
 spotless {
   java {

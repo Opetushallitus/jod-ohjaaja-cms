@@ -9,7 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.test;
 
-import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
@@ -40,7 +40,7 @@ import org.osgi.framework.ServiceReference;
  * Integration tests for NavigationService.
  * Tests navigation menu management functionality.
  */
-@RunWith(Arquillian.class)
+@RunWith(JodInContainerRunner.class)
 public class NavigationServiceTest {
 
   @ClassRule @Rule

@@ -1,6 +1,6 @@
 package fi.okm.jod.ohjaaja.cms.tags.test;
 
-import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
@@ -22,7 +22,7 @@ import org.osgi.framework.ServiceReference;
  * Integration tests for TagsService.
  * Tests taxonomy category management functionality.
  */
-@RunWith(Arquillian.class)
+@RunWith(JodInContainerRunner.class)
 public class TagsServiceTest {
 
   @ClassRule @Rule

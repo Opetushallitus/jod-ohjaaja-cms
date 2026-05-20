@@ -9,9 +9,12 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
-import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
+import com.liferay.counter.kernel.service.CounterLocalServiceUtil;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
+import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil;
 import com.liferay.portal.kernel.model.User;
@@ -45,7 +48,7 @@ import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.List;
 
-@RunWith(Arquillian.class)
+@RunWith(JodInContainerRunner.class)
 public class StudyProgramImportIntegrationTest {
 
   @ClassRule
@@ -241,46 +244,28 @@ public class StudyProgramImportIntegrationTest {
   public void shouldPreventConcurrentTasks() throws Exception {
     System.out.println("\n=== Testing Concurrent Task Prevention ===");
 
-    // Start first import
-    BackgroundTask task1 = backgroundTaskService.startImportTask(TestPropsValues.getUserId());
-    Assert.assertNotNull("First task should be created", task1);
-    System.out.println("✅ First import task started: " + task1.getBackgroundTaskId());
-
-    // Try to start another import while first is running
-    var concurrentImport =
-        Assert.assertThrows(
-            "Should not allow concurrent import tasks",
-            IllegalStateException.class,
-            () -> backgroundTaskService.startImportTask(TestPropsValues.getUserId()));
-    System.out.println(
-        "✅ Concurrent import correctly prevented: " + concurrentImport.getMessage());
-
-    // Try to start delete while import is running
-    var concurrentDelete =
-        Assert.assertThrows(
-            "Should not allow delete while import is running",
-            IllegalStateException.class,
-            () -> backgroundTaskService.startDeleteTask(TestPropsValues.getUserId()));
-    System.out.println(
-        "✅ Delete correctly prevented during import: " + concurrentDelete.getMessage());
-
-    // Wait for first task to complete
-    long firstTaskId = task1.getBackgroundTaskId();
+    long fakeTaskId = createFakeRunningImportTask();
     try {
-      Awaitility.await()
-          .atMost(Duration.ofSeconds(60))
-          .pollInterval(Duration.ofSeconds(1))
-          .until(() -> {
-            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(firstTaskId);
-            return current != null && current.isCompleted();
-          });
-      System.out.println("✅ First task completed");
-    } catch (Exception ignored) {
-      // Fall through to cleanup. Subsequent tests will detect lingering tasks if any
-    }
+      long userId = TestPropsValues.getUserId();
 
-    // Give time for task to be cleaned up
-    settle(Duration.ofSeconds(2));
+      var concurrentImport =
+          Assert.assertThrows(
+              "Should not allow concurrent import tasks",
+              IllegalStateException.class,
+              () -> backgroundTaskService.startImportTask(userId));
+      System.out.println(
+          "✅ Concurrent import correctly prevented: " + concurrentImport.getMessage());
+
+      var concurrentDelete =
+          Assert.assertThrows(
+              "Should not allow delete while import is running",
+              IllegalStateException.class,
+              () -> backgroundTaskService.startDeleteTask(userId));
+      System.out.println(
+          "✅ Delete correctly prevented during import: " + concurrentDelete.getMessage());
+    } finally {
+      deleteBackgroundTaskById(fakeTaskId);
+    }
 
     System.out.println("✅ Concurrent task prevention test completed");
   }
@@ -289,36 +274,98 @@ public class StudyProgramImportIntegrationTest {
   public void shouldDetectRunningTasks() throws Exception {
     System.out.println("\n=== Testing Task Detection ===");
 
-    // Initially no tasks should be running (or might be if previous test just finished)
-    boolean initiallyRunning = backgroundTaskService.isAnyImportOrDeleteTaskRunning();
-    System.out.println("Initially running: " + initiallyRunning);
+    Assert.assertFalse(
+        "No task should be running before setup",
+        backgroundTaskService.isAnyImportOrDeleteTaskRunning());
 
-    // Start a task
-    BackgroundTask task = backgroundTaskService.startImportTask(TestPropsValues.getUserId());
-    Assert.assertNotNull("Task should be created", task);
-
-    // Should detect running task
-    boolean nowRunning = backgroundTaskService.isAnyImportOrDeleteTaskRunning();
-    Assert.assertTrue("Should detect running task", nowRunning);
-    System.out.println("✅ Running task detected");
-
-    // Wait for completion
-    long detectionTaskId = task.getBackgroundTaskId();
+    // LiferayIntegrationTestRule replaces liferay/background_task with a synchronous
+    // destination, so a real startImportTask() runs the executor to completion before it
+    // returns - the task is never observable as "running". We insert an IN_PROGRESS row
+    // directly so we can verify that isAnyImportOrDeleteTaskRunning() reports it.
+    long fakeTaskId = createFakeRunningImportTask();
     try {
-      Awaitility.await()
-          .atMost(Duration.ofSeconds(60))
-          .pollInterval(Duration.ofSeconds(1))
-          .until(() -> {
-            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(detectionTaskId);
-            return current != null && current.isCompleted();
-          });
-    } catch (Exception ignored) {
-      // Fall through to cleanup. The assertions above already covered the detection scenario
+      Assert.assertTrue(
+          "Should detect running task",
+          backgroundTaskService.isAnyImportOrDeleteTaskRunning());
+      System.out.println("✅ Running task detected");
+    } finally {
+      deleteBackgroundTaskById(fakeTaskId);
     }
 
-    // Give time for cleanup
-    settle(Duration.ofSeconds(2));
-
     System.out.println("✅ Task detection test completed");
+  }
+
+  /**
+   * Inserts a BackgroundTask row directly into the database with status IN_PROGRESS so the
+   * concurrent-task prevention logic can observe it as active.
+   *
+   * <p>We cannot start a task through {@link StudyProgramBackgroundTaskService#startImportTask}
+   * here because {@link LiferayIntegrationTestRule} registers a synchronous destination for
+   * {@code liferay/background_task}, which makes every dispatched task run to completion on the
+   * test thread before {@code startImportTask} returns. Bypassing the dispatcher and writing the
+   * row ourselves lets us simulate an in-progress task deterministically.
+   */
+  private static long createFakeRunningImportTask() throws Exception {
+    long taskId =
+        CounterLocalServiceUtil.increment(
+            com.liferay.portal.background.task.model.BackgroundTask.class.getName());
+    var task = BackgroundTaskLocalServiceUtil.createBackgroundTask(taskId);
+    User user = TestPropsValues.getUser();
+    task.setUserId(user.getUserId());
+    task.setUserName(user.getFullName());
+    task.setCompanyId(user.getCompanyId());
+    task.setGroupId(TEST_GROUP_ID);
+    task.setName("study-program-import");
+    task.setTaskExecutorClassName(
+        "fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor");
+    // Liferay's BackgroundTaskModelListener.onBeforeRemove reads from the context map, so it
+    // must be non-null even though we do not need any actual context values here.
+    task.setTaskContextMap(new java.util.HashMap<>());
+    task.setStatus(BackgroundTaskConstants.STATUS_IN_PROGRESS);
+    BackgroundTaskLocalServiceUtil.updateBackgroundTask(task);
+    return taskId;
+  }
+
+  /**
+   * Deletes any background tasks that previous test runs (in this or earlier JVM lifetimes) may
+   * have left behind. Without this, a leftover IN_PROGRESS row from a partially failed run would
+   * make the concurrent-task prevention assertions fail spuriously.
+   */
+  @Before
+  public void clearLeftoverBackgroundTasks() {
+    deleteAllBackgroundTasks("study-program-import");
+    deleteAllBackgroundTasks("study-program-delete");
+  }
+
+  private static void deleteAllBackgroundTasks(String taskName) {
+    for (var task : BackgroundTaskLocalServiceUtil.getBackgroundTasks(TEST_GROUP_ID, taskName)) {
+      deleteBackgroundTaskById(task.getBackgroundTaskId());
+    }
+  }
+
+  /**
+   * Deletes a background task row, normalising its state first so that Liferay's lifecycle
+   * checks do not refuse the deletion. Tasks left in {@code IN_PROGRESS} status (as produced
+   * by {@link #createFakeRunningImportTask}) are first marked as completed; missing context
+   * maps - required by {@code BackgroundTaskModelListener.onBeforeRemove} - are filled in.
+   */
+  private static void deleteBackgroundTaskById(long taskId) {
+    try {
+      com.liferay.portal.background.task.model.BackgroundTask task =
+          BackgroundTaskLocalServiceUtil.fetchBackgroundTask(taskId);
+      if (task == null) {
+        return;
+      }
+      if (task.getTaskContextMap() == null) {
+        task.setTaskContextMap(new java.util.HashMap<>());
+      }
+      task.setStatus(com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants.STATUS_SUCCESSFUL);
+      task.setCompleted(true);
+      BackgroundTaskLocalServiceUtil.updateBackgroundTask(task);
+      BackgroundTaskLocalServiceUtil.deleteBackgroundTask(task);
+    } catch (Exception e) {
+      System.err.println(
+          "Warning: failed to delete background task " + taskId + ": " + e.getMessage());
+    }
   }
 }

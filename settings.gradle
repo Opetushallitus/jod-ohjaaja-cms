@@ -1,7 +1,7 @@
-include ':test:arquillian-extension-junit-bridge-connector'
-project(':test:arquillian-extension-junit-bridge-connector').projectDir = file('test/arquillian-extension-junit-bridge-connector')
-include ':test:arquillian-extension-junit-bridge'
-project(':test:arquillian-extension-junit-bridge').projectDir = file('test/arquillian-extension-junit-bridge')
+include ':test:jod-cms-testrunner-osgi'
+project(':test:jod-cms-testrunner-osgi').projectDir = file('test/jod-cms-testrunner-osgi')
+include ':test:jod-cms-testrunner-client'
+project(':test:jod-cms-testrunner-client').projectDir = file('test/jod-cms-testrunner-client')
 
 include ':modules:jod-ohjaaja-cms-tags-test'
 include ':modules:jod-ohjaaja-cms-navigation-test'
@@ -12,10 +12,10 @@ include ':modules:jod-ohjaaja-cms-search-test'
 
 buildscript {
 	dependencies {
-		classpath group: "com.liferay", name: "com.liferay.gradle.plugins.workspace", version: "13.1.2"
-    classpath group: "com.liferay", name: "com.liferay.gradle.plugins.test.integration", version: "4.0.0"
-    classpath group: "com.liferay", name: "com.liferay.gradle.plugins", version: "16.1.26"
-	}
+		classpath "com.liferay:com.liferay.gradle.plugins.workspace:13.1.2"
+    classpath "com.liferay:com.liferay.gradle.plugins.test.integration:4.0.0"
+    classpath "com.liferay:com.liferay.gradle.plugins:16.1.26"
+  }
 
 	repositories {
 		mavenLocal()
