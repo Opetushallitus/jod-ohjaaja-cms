@@ -2,8 +2,8 @@ plugins {
   id "com.diffplug.spotless" version "7.0.2"
 }
 dependencies {
-	compileOnly group: "com.liferay.portal", name: "release.portal.api"
-  compileInclude group: "com.fasterxml.jackson.datatype", name: "jackson-datatype-jsr310", version: "2.18.2"
+	compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
+  compileInclude "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.7"
   compileOnly project(":modules:jod-ohjaaja-cms-study-program-importer")
 }
 spotless {

@@ -9,7 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.search.test;
 
-import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.document.library.kernel.service.DLAppLocalService;
 import com.liferay.dynamic.data.mapping.model.DDMForm;
 import com.liferay.dynamic.data.mapping.model.DDMFormField;
@@ -67,10 +67,9 @@ import org.osgi.framework.ServiceReference;
 
 /**
  * Integration tests for JodJournalArticleIndexerPostProcessor.
- *
  * Tests IndexerPostProcessor registration and basic article indexing.
  */
-@RunWith(Arquillian.class)
+@RunWith(JodInContainerRunner.class)
 public class JodJournalArticleIndexerPostProcessorTest {
 
   @ClassRule @Rule
@@ -115,7 +114,7 @@ public class JodJournalArticleIndexerPostProcessorTest {
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     if (testArticle != null) {
       try {
         journalArticleLocalService.deleteArticle(testArticle);

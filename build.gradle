@@ -25,7 +25,7 @@ tasks.register('copyTestDockerfile', Copy) {
 
 tasks.register('downloadPortalTestBundle', Copy) {
   from configurations.detachedConfiguration(
-    dependencies.create('com.liferay.portal:com.liferay.portal.test:30.0.0')
+    dependencies.create('com.liferay.portal:com.liferay.portal.test:28.0.0')
   )
   into layout.buildDirectory.dir('docker/portal-test-libs')
   rename { 'com.liferay.portal.test.jar' }
@@ -34,17 +34,17 @@ tasks.register('downloadPortalTestBundle', Copy) {
   }
 }
 
-tasks.register('copyArquillianConnectorToDocker', Copy) {
-  dependsOn ':test:arquillian-extension-junit-bridge-connector:build'
-  from "${rootProject.projectDir}/test/arquillian-extension-junit-bridge-connector/build/libs/arquillian-extension-junit-bridge-connector.jar"
-  into layout.buildDirectory.dir('docker/test/arquillian-extension-junit-bridge-connector/build/libs')
+tasks.register('copyTestRunnerOsgiToDocker', Copy) {
+  dependsOn ':test:jod-cms-testrunner-osgi:build'
+  from "${rootProject.projectDir}/test/jod-cms-testrunner-osgi/build/libs/jod-cms-testrunner-osgi.jar"
+  into layout.buildDirectory.dir('docker/test/jod-cms-testrunner-osgi/build/libs')
   doFirst {
-    println "Copying Arquillian connector JAR to Docker context"
+    println "Copying JOD integration test runner OSGi bundle to Docker context"
   }
 }
 
 tasks.register('dockerBuildTestImage', Exec) {
-  dependsOn tasks.named('copyTestDockerfile'), tasks.named('copyArquillianConnectorToDocker'), tasks.named('downloadPortalTestBundle')
+  dependsOn tasks.named('copyTestDockerfile'), tasks.named('copyTestRunnerOsgiToDocker'), tasks.named('downloadPortalTestBundle')
   commandLine 'docker', 'build', '-t', 'liferay-test', '-f', "${layout.buildDirectory.get().asFile}/docker/Dockerfile.test", "${layout.buildDirectory.get().asFile}/docker"
 }
 
@@ -73,9 +73,6 @@ tasks.register('dockerRunTestContainer') {
             commandLine 'docker', 'run', '-d',
                 '--name', 'liferay-test-container',
                 '-p', '8080:8080',
-                '-p', '8099:8099',
-                '-p', '11311:11311',
-                '-p', '32763:32763',
                 '-e', 'LIFERAY_WORKSPACE_ENVIRONMENT=test',
                 'liferay-test:latest'
         }
