@@ -9,7 +9,9 @@
 
 package fi.okm.jod.ohjaaja.cms.comments.moderation.constants;
 
-public class CommentsModerationPortletKeys {
+public final class CommentsModerationPortletKeys {
   public static final String COMMENTS_MODERATION =
       "fi_okm_jod_ohjaaja_cms_comments_moderation_portlet_CommentsModerationPortlet";
+
+  private CommentsModerationPortletKeys() {}
 }

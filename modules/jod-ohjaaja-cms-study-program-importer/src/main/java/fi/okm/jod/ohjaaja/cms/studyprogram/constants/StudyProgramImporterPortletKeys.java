@@ -9,7 +9,9 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.constants;
 
-public class StudyProgramImporterPortletKeys {
+public final class StudyProgramImporterPortletKeys {
   public static final String STUDY_PROGRAM_IMPORTER =
       "fi_okm_jod_ohjaaja_cms_studyprogram_portlet_StudyProgramImporterPortlet";
+
+  private StudyProgramImporterPortletKeys() {}
 }

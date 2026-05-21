@@ -85,17 +85,7 @@ public class StudyProgramFileService {
       serviceContext.setAddGuestPermissions(true);
       serviceContext.setAddGuestPermissions(true);
 
-      FileEntry fileEntry = null;
-      try {
-        fileEntry =
-            dlAppLocalService.getFileEntryByExternalReferenceCode(
-                externalReferenceCode, JOD_GROUP_ID);
-      } catch (PortalException e) {
-        log.info(
-            "No existing file entry found for external reference code: "
-                + externalReferenceCode
-                + ". Creating a new one.");
-      }
+      FileEntry fileEntry = findExistingFileEntry(externalReferenceCode);
 
       if (fileEntry != null) {
         // If file entry already exists, update it
@@ -142,6 +132,19 @@ public class StudyProgramFileService {
           "Failed to get or create image " + fileName + " (ERC: " + externalReferenceCode + ")", e);
     }
     return null;
+  }
+
+  private FileEntry findExistingFileEntry(String externalReferenceCode) {
+    try {
+      return dlAppLocalService.getFileEntryByExternalReferenceCode(
+          externalReferenceCode, JOD_GROUP_ID);
+    } catch (PortalException e) {
+      log.info(
+          "No existing file entry found for external reference code: "
+              + externalReferenceCode
+              + ". Creating a new one.");
+      return null;
+    }
   }
 
   public byte[] readImageBytes(String resourcePath) throws IOException {

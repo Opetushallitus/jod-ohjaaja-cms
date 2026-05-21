@@ -9,7 +9,9 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.constants;
 
-public class OhjaajaPanelCategoryKeys {
+public final class OhjaajaPanelCategoryKeys {
   public static final String OHJAAJA_PANEL_CATEGORY_KEY =
       "fi_okm_jod_ohjaaja_cms_ohjaaja_panel_category";
+
+  private OhjaajaPanelCategoryKeys() {}
 }

@@ -34,6 +34,8 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
   private static final Log log =
       LogFactoryUtil.getLog(DeleteImportedStudyProgramsBackgroundTaskExecutor.class);
 
+  private static final String STATUS_ATTRIBUTE_PROGRESS = "progress";
+
   @Reference private StudyProgramFileService studyProgramFileService;
   @Reference private StudyProgramStructureService studyProgramStructureService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
@@ -50,7 +52,7 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
             backgroundTask.getBackgroundTaskId());
 
     status.setAttribute("phase", "studyprogram.deleting");
-    status.setAttribute("progress", 0);
+    status.setAttribute(STATUS_ATTRIBUTE_PROGRESS, 0);
 
     var serviceContext = getServiceContext();
 
@@ -84,7 +86,7 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
                 + e.getMessage());
       }
 
-      status.setAttribute("progress", (i + 1) * 100 / total);
+      status.setAttribute(STATUS_ATTRIBUTE_PROGRESS, (i + 1) * 100 / total);
     }
 
     try {
@@ -93,14 +95,14 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
       log.error("Failed to delete DDM structure", e);
       reportError(backgroundTask, "Failed to delete DDM structure: " + e.getMessage());
     }
-    status.setAttribute("progress", (articles.size() + 1) * 100 / total);
+    status.setAttribute(STATUS_ATTRIBUTE_PROGRESS, (articles.size() + 1) * 100 / total);
     try {
       studyProgramFileService.deleteStudyProgramImageFolder();
     } catch (Exception e) {
       log.error("Failed to delete study program image folder", e);
       reportError(backgroundTask, "Failed to delete study program image folder: " + e.getMessage());
     }
-    status.setAttribute("progress", 100);
+    status.setAttribute(STATUS_ATTRIBUTE_PROGRESS, 100);
     status.setAttribute("phase", "studyprogram.completed");
 
     return BackgroundTaskResult.SUCCESS;

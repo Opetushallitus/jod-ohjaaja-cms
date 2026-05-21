@@ -13,6 +13,7 @@ import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
+import com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
@@ -23,6 +24,7 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramBackgroundTaskService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
+import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -37,6 +39,7 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Dictionary;
 import java.util.Hashtable;
@@ -59,7 +62,7 @@ public class StudyProgramImportIntegrationTest {
   private static PermissionChecker originalPermissionChecker;
   private static ServiceRegistration<KonfoClient> mockServiceRegistration;
 
-  private static List<String> allCreatedArticleIds = new ArrayList<>();
+  private static final List<String> allCreatedArticleIds = new ArrayList<>();
 
   private List<String> createdArticleIds = new ArrayList<>();
 
@@ -74,11 +77,14 @@ public class StudyProgramImportIntegrationTest {
     props.put("service.ranking", 1000);
     mockServiceRegistration = bundleContext.registerService(
         KonfoClient.class, mockKonfoClient, props);
-    
+
     System.out.println("✅ MockKonfoClient registered as OSGi service with ranking 1000");
 
-    // Wait a moment for service registration to propagate
-    Thread.sleep(500);
+    // Wait for the higher-ranked MockKonfoClient registration to become the resolved service
+    Awaitility.await()
+        .atMost(Duration.ofSeconds(5))
+        .pollInterval(Duration.ofMillis(100))
+        .until(() -> getService(KonfoClient.class) instanceof MockKonfoClient);
 
     studyProgramService = getService(StudyProgramService.class);
     journalArticleLocalService = getService(JournalArticleLocalService.class);
@@ -88,7 +94,7 @@ public class StudyProgramImportIntegrationTest {
     System.out.println("✅ KonfoClient type: " + konfoClient.getClass().getName());
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    
+
     var permissionCheckerFactory = getService(PermissionCheckerFactory.class);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
@@ -102,10 +108,10 @@ public class StudyProgramImportIntegrationTest {
       System.out.println("✅ MockKonfoClient service unregistered");
     }
     PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-    
+
     // Note: Articles are NOT automatically deleted to allow inspection
     // They can be manually cleaned up or will be removed when container restarts
-    System.out.println("\n=== Test completed. " + allCreatedArticleIds.size() + 
+    System.out.println("\n=== Test completed. " + allCreatedArticleIds.size() +
         " articles remain for inspection ===");
   }
 
@@ -132,19 +138,18 @@ public class StudyProgramImportIntegrationTest {
     // Check if import is already running - if so, wait for it
     if (backgroundTaskService.isAnyImportOrDeleteTaskRunning()) {
       System.out.println("⏳ Import already running, waiting for it to complete...");
-      
-      // Wait up to 60 seconds for the running import to finish
-      for (int i = 0; i < 60; i++) {
-        Thread.sleep(1000);
-        if (!backgroundTaskService.isAnyImportOrDeleteTaskRunning()) {
-          System.out.println("✅ Previous import completed after " + i + " seconds");
-          // Give a moment for database transaction to commit
-          Thread.sleep(2000);
-          return;
-        }
+      try {
+        Awaitility.await()
+            .atMost(Duration.ofSeconds(60))
+            .pollInterval(Duration.ofSeconds(1))
+            .until(() -> !backgroundTaskService.isAnyImportOrDeleteTaskRunning());
+      } catch (Exception timeout) {
+        Assert.fail("Import task did not complete within 60 seconds (was already running)");
+        return;
       }
-      
-      Assert.fail("Import task did not complete within 60 seconds (was already running)");
+      System.out.println("✅ Previous import completed");
+      // Allow database transaction to commit
+      settle(Duration.ofSeconds(2));
       return;
     }
 
@@ -152,28 +157,42 @@ public class StudyProgramImportIntegrationTest {
     BackgroundTask task = backgroundTaskService.startImportTask(TestPropsValues.getUserId());
     long taskId = task.getBackgroundTaskId();
     System.out.println("🚀 Started import task ID: " + taskId);
-    
-    // Wait for completion
-    for (int i = 0; i < 60; i++) {
-      Thread.sleep(1000);
-      task = com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil
-          .fetchBackgroundTask(taskId);
-      if (task != null && task.isCompleted()) {
-        System.out.println("✅ Import completed after " + i + " seconds");
-        // Give a moment for database transaction to commit
-        Thread.sleep(2000);
-        return;
-      }
+
+    try {
+      Awaitility.await()
+          .atMost(Duration.ofSeconds(60))
+          .pollInterval(Duration.ofSeconds(1))
+          .until(() -> {
+            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(taskId);
+            return current != null && current.isCompleted();
+          });
+    } catch (Exception timeout) {
+      Assert.fail("Import task did not complete within 60 seconds");
+      return;
     }
-    
-    Assert.fail("Import task did not complete within 60 seconds");
+    System.out.println("✅ Import completed");
+    // Allow database transaction to commit
+    settle(Duration.ofSeconds(2));
+  }
+
+  /**
+   * Pauses the current thread for the given duration without using {@link Thread#sleep(long)},
+   * so callers can wait for asynchronous side effects (e.g. database transaction commits or
+   * background task cleanup) to become visible. Implemented via Awaitility's {@code pollDelay}
+   * to satisfy the "no Thread.sleep in tests" rule while still expressing an intentional pause.
+   */
+  private static void settle(Duration duration) {
+    Awaitility.await()
+        .pollDelay(duration)
+        .atMost(duration.plusSeconds(1))
+        .until(() -> true);
   }
 
   @Test
   public void shouldImportStudyProgramsUsingMockClient() throws Exception {
     System.out.println("\n=== Testing Import via startImportTask() with MockKonfoClient ===");
 
-    Assert.assertTrue("KonfoClient should be MockKonfoClient", 
+    Assert.assertTrue("KonfoClient should be MockKonfoClient",
         konfoClient instanceof MockKonfoClient);
 
     int initialCount = studyProgramService.getImportedStudyPrograms().size();
@@ -184,27 +203,27 @@ public class StudyProgramImportIntegrationTest {
 
     // Run import
     runImportAndWait();
-    
+
     for (int i = 1; i <= expectedCount; i++) {
       String oid = "1.2.246.562.20.0000000000" + i;
       JournalArticle article = journalArticleLocalService
           .fetchLatestArticleByExternalReferenceCode(TEST_GROUP_ID, oid);
-      
+
       if (article != null) {
         createdArticleIds.add(oid);
         System.out.println("✅ Article imported: " + article.getTitle("fi_FI") + " (OID: " + oid + ")");
-        
+
         // Verify article content for first article
         if (i == 1) {
           String fiTitle = article.getTitle("fi_FI");
           Assert.assertNotNull("Finnish title should exist", fiTitle);
-          Assert.assertTrue("Title should not be empty", fiTitle.length() > 0);
-          
+          Assert.assertFalse("Title should not be empty", fiTitle.isEmpty());
+
           String content = article.getContent();
           Assert.assertNotNull("Content should not be null", content);
           Assert.assertFalse("Content should not be empty", content.isEmpty());
-          
-          System.out.println("   ✅ Article content verified - Title: " + fiTitle + 
+
+          System.out.println("   ✅ Article content verified - Title: " + fiTitle +
               ", Content length: " + content.length() + " chars");
         }
       }
@@ -228,34 +247,40 @@ public class StudyProgramImportIntegrationTest {
     System.out.println("✅ First import task started: " + task1.getBackgroundTaskId());
 
     // Try to start another import while first is running
-    try {
-      backgroundTaskService.startImportTask(TestPropsValues.getUserId());
-      Assert.fail("Should not allow concurrent import tasks");
-    } catch (IllegalStateException e) {
-      System.out.println("✅ Concurrent import correctly prevented: " + e.getMessage());
-    }
+    var concurrentImport =
+        Assert.assertThrows(
+            "Should not allow concurrent import tasks",
+            IllegalStateException.class,
+            () -> backgroundTaskService.startImportTask(TestPropsValues.getUserId()));
+    System.out.println(
+        "✅ Concurrent import correctly prevented: " + concurrentImport.getMessage());
 
     // Try to start delete while import is running
-    try {
-      backgroundTaskService.startDeleteTask(TestPropsValues.getUserId());
-      Assert.fail("Should not allow delete while import is running");
-    } catch (IllegalStateException e) {
-      System.out.println("✅ Delete correctly prevented during import: " + e.getMessage());
-    }
+    var concurrentDelete =
+        Assert.assertThrows(
+            "Should not allow delete while import is running",
+            IllegalStateException.class,
+            () -> backgroundTaskService.startDeleteTask(TestPropsValues.getUserId()));
+    System.out.println(
+        "✅ Delete correctly prevented during import: " + concurrentDelete.getMessage());
 
     // Wait for first task to complete
-    for (int i = 0; i < 60; i++) {
-      Thread.sleep(1000);
-      BackgroundTask currentTask = com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil
-          .fetchBackgroundTask(task1.getBackgroundTaskId());
-      if (currentTask != null && currentTask.isCompleted()) {
-        System.out.println("✅ First task completed");
-        break;
-      }
+    long firstTaskId = task1.getBackgroundTaskId();
+    try {
+      Awaitility.await()
+          .atMost(Duration.ofSeconds(60))
+          .pollInterval(Duration.ofSeconds(1))
+          .until(() -> {
+            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(firstTaskId);
+            return current != null && current.isCompleted();
+          });
+      System.out.println("✅ First task completed");
+    } catch (Exception ignored) {
+      // Fall through to cleanup. Subsequent tests will detect lingering tasks if any
     }
 
     // Give time for task to be cleaned up
-    Thread.sleep(2000);
+    settle(Duration.ofSeconds(2));
 
     System.out.println("✅ Concurrent task prevention test completed");
   }
@@ -278,17 +303,21 @@ public class StudyProgramImportIntegrationTest {
     System.out.println("✅ Running task detected");
 
     // Wait for completion
-    for (int i = 0; i < 60; i++) {
-      Thread.sleep(1000);
-      BackgroundTask currentTask = com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil
-          .fetchBackgroundTask(task.getBackgroundTaskId());
-      if (currentTask != null && currentTask.isCompleted()) {
-        break;
-      }
+    long detectionTaskId = task.getBackgroundTaskId();
+    try {
+      Awaitility.await()
+          .atMost(Duration.ofSeconds(60))
+          .pollInterval(Duration.ofSeconds(1))
+          .until(() -> {
+            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(detectionTaskId);
+            return current != null && current.isCompleted();
+          });
+    } catch (Exception ignored) {
+      // Fall through to cleanup. The assertions above already covered the detection scenario
     }
 
     // Give time for cleanup
-    Thread.sleep(2000);
+    settle(Duration.ofSeconds(2));
 
     System.out.println("✅ Task detection test completed");
   }

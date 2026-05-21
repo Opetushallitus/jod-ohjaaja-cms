@@ -246,7 +246,6 @@
                 <li class="page-item <%if(currentPage == 1) {%>disabled<%}%>">
                   <%if (currentPage > 1) {%>
                   <a class="page-link" aria-label="<%= LanguageUtil.format(request, "previous.page.aria", currentPage-1)%>"
-                     role="button" tabindex="0"
                      href="<%= renderResponse.createRenderURL().toString() %>&<%= renderResponse.getNamespace() %>tab=all&<%= renderResponse.getNamespace() %>currentPage=<%= currentPage-1 %>">
                     <liferay-ui:icon icon="angle-left"/>
                   </a>
@@ -280,7 +279,6 @@
                 <li class="page-item <%if(currentPage == commentsPage.sivuja()) {%>disabled<%}%>">
                   <%if (currentPage < commentsPage.sivuja()) {%>
                   <a class="page-link" aria-label="<%= LanguageUtil.format(request, "next.page.aria", currentPage+1)%>"
-                     role="button" tabindex="0"
                      href="<%= renderResponse.createRenderURL().toString() %>&<%= renderResponse.getNamespace() %>tab=all&<%= renderResponse.getNamespace() %>currentPage=<%= currentPage+1 %>">
                     <liferay-ui:icon icon="angle-right"/>
                   </a>

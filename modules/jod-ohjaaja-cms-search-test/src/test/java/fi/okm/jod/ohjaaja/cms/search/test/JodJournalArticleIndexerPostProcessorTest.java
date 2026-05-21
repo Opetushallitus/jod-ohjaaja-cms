@@ -42,6 +42,7 @@ import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.search.JodJournalArticleIndexerPostProcessor;
 import java.io.ByteArrayOutputStream;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,6 +52,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -213,17 +215,17 @@ public class JodJournalArticleIndexerPostProcessorTest {
     var indexer = indexerRegistry.getIndexer(JournalArticle.class);
     indexer.reindex(testArticle);
 
-
-    // Wait for indexing to complete
-    Thread.sleep(2000);
-
-    // Search for the article to verify it's indexed
+    // Search for the article to verify it's indexed.
+    // Indexing is asynchronous, so poll the search until results show up.
     var searchContext = new SearchContext();
     searchContext.setCompanyId(TestPropsValues.getCompanyId());
     searchContext.setGroupIds(new long[]{TEST_GROUP_ID});
     searchContext.setKeywords("searchable");
 
-    var hits = indexer.search(searchContext);
+    var hits = Awaitility.await()
+        .atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(250))
+        .until(() -> indexer.search(searchContext), h -> h.getLength() > 0);
     Assert.assertTrue("Should find at least one article", hits.getLength() > 0);
 
     var document = hits.doc(0);
@@ -282,10 +284,10 @@ public class JodJournalArticleIndexerPostProcessorTest {
 
     Assert.assertNotNull("IndexerRegistry service reference should not be null", reference);
 
-    var indexerRegistry = bundleContext.getService(reference);
-    Assert.assertNotNull("IndexerRegistry service should not be null", indexerRegistry);
+    var registry = bundleContext.getService(reference);
+    Assert.assertNotNull("IndexerRegistry service should not be null", registry);
 
-    var indexer = indexerRegistry.getIndexer(JournalArticle.class);
+    var indexer = registry.getIndexer(JournalArticle.class);
     Assert.assertNotNull("JournalArticle indexer should be available", indexer);
 
 
@@ -393,18 +395,21 @@ public class JodJournalArticleIndexerPostProcessorTest {
         null,
         serviceContext);
 
-    // 4. Reindex and wait for Elasticsearch
+    // 4. Reindex and wait for Elasticsearch to make the document searchable.
     var indexer = indexerRegistry.getIndexer(JournalArticle.class);
     indexer.reindex(testArticle);
-    Thread.sleep(3000); // Wait for async indexing
 
-    // 5. Search for the unique PDF keyword
+    // 5. Search for the unique PDF keyword. Indexing is asynchronous, so poll
+    //    the search until the new article shows up (or fail after the timeout).
     var searchContext = new SearchContext();
     searchContext.setCompanyId(TestPropsValues.getCompanyId());
     searchContext.setGroupIds(new long[]{TEST_GROUP_ID});
     searchContext.setKeywords(uniqueKeyword);
 
-    var hits = indexer.search(searchContext);
+    var hits = Awaitility.await()
+        .atMost(Duration.ofSeconds(15))
+        .pollInterval(Duration.ofMillis(250))
+        .until(() -> indexer.search(searchContext), h -> h.getLength() > 0);
 
     Assert.assertTrue("Should find article by PDF content keyword", hits.getLength() > 0);
 

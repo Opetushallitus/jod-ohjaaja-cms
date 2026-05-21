@@ -12,7 +12,9 @@ package fi.okm.jod.ohjaaja.cms.studyprogram.constants;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import java.util.Locale;
 
-public class StudyProgramImporterConstants {
+public final class StudyProgramImporterConstants {
+  private StudyProgramImporterConstants() {}
+
   public static final String EXTERNAL_REFERENCE_CODE = "ohjaaja-study-program";
   public static final long JOD_GROUP_ID = 20117;
   public static final String STUDY_PROGRAM_TAG_CATEGORY_EXTERNAL_REFERENCE_CODE =

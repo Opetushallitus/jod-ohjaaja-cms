@@ -37,8 +37,9 @@ public class CommentsModerationApiClient {
   private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(30);
   private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
 
-  private static final String API_BASE_PATH = "/internal-api/moderointi/kommentit";
-  private static final String API_URL = PropsUtil.get("ohjaaja.backend.url") + API_BASE_PATH;
+  private static final String API_URL =
+      PropsUtil.get("ohjaaja.backend.url")
+          + PropsUtil.get("ohjaaja.backend.comments.moderation.api.path");
 
   public CommentsModerationApiClient() {
     this.httpClient = HttpClient.newBuilder().connectTimeout(CONNECTION_TIMEOUT).build();
@@ -71,6 +72,10 @@ public class CommentsModerationApiClient {
                 + ", Response: "
                 + response.body());
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("Interrupted while fetching kommentti report summaries from " + url, e);
+      throw new ModerationApiException(e);
     } catch (Exception e) {
       log.error("Error while fetching kommentti report summaries from " + url, e);
       throw new ModerationApiException(e);
@@ -98,6 +103,10 @@ public class CommentsModerationApiClient {
                 + ", Response: "
                 + response.body());
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("Interrupted while fetching comments from " + url, e);
+      throw new ModerationApiException(e);
     } catch (Exception e) {
       log.error("Error while fetching comments from " + url, e);
       throw new ModerationApiException(e);
@@ -135,6 +144,10 @@ public class CommentsModerationApiClient {
                 + ", Response: "
                 + response.body());
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("Interrupted while sending DELETE to " + url, e);
+      throw new ModerationApiException(e);
     } catch (Exception e) {
       log.error("Error while sending DELETE to " + url, e);
       throw new ModerationApiException(e);

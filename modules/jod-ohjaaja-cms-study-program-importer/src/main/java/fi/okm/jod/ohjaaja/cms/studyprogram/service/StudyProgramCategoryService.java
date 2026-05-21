@@ -40,6 +40,10 @@ public class StudyProgramCategoryService {
 
   private static final Log log = LogFactoryUtil.getLog(StudyProgramCategoryService.class);
 
+  private static final String LANGUAGE_ID_FI_FI = "fi_FI";
+  private static final String LANGUAGE_ID_EN_US = "en_US";
+  private static final String LANGUAGE_ID_SV_SE = "sv_SE";
+
   @Reference private AssetVocabularyLocalService assetVocabularyLocalService;
   @Reference private AssetCategoryLocalService assetCategoryLocalService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
@@ -125,11 +129,11 @@ public class StudyProgramCategoryService {
           StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_EXTERNAL_REFERENCE_CODE,
           StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE,
           Map.of(
-              "fi_FI",
+              LANGUAGE_ID_FI_FI,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE,
-              "en_US",
+              LANGUAGE_ID_EN_US,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_ENGLISH_TITLE,
-              "sv_SE",
+              LANGUAGE_ID_SV_SE,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_SWEDISH_TITLE),
           StudyProgramImporterConstants.JOD_GROUP_ID);
     } else {
@@ -138,11 +142,11 @@ public class StudyProgramCategoryService {
           StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_EXTERNAL_REFERENCE_CODE,
           StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE,
           Map.of(
-              "fi_FI",
+              LANGUAGE_ID_FI_FI,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE,
-              "en_US",
+              LANGUAGE_ID_EN_US,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_ENGLISH_TITLE,
-              "sv_SE",
+              LANGUAGE_ID_SV_SE,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_SWEDISH_TITLE),
           StudyProgramImporterConstants.JOD_GROUP_ID);
     }
@@ -162,7 +166,7 @@ public class StudyProgramCategoryService {
               .filter(
                   vocabulary ->
                       StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE
-                          .equals(vocabulary.getTitle("fi_FI")))
+                          .equals(vocabulary.getTitle(LANGUAGE_ID_FI_FI)))
               .findFirst()
               .orElse(null);
     }
@@ -189,7 +193,7 @@ public class StudyProgramCategoryService {
               .filter(
                   assetCategory ->
                       StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_FINNISH_TITLE.equals(
-                          assetCategory.getTitle("fi_FI")))
+                          assetCategory.getTitle(LANGUAGE_ID_FI_FI)))
               .findFirst()
               .orElse(null);
     }
@@ -200,7 +204,7 @@ public class StudyProgramCategoryService {
               .filter(
                   assetCategory ->
                       StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE
-                          .equals(assetCategory.getTitle("fi_FI")))
+                          .equals(assetCategory.getTitle(LANGUAGE_ID_FI_FI)))
               .findFirst()
               .orElse(null);
     }
@@ -249,11 +253,11 @@ public class StudyProgramCategoryService {
         null,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE,
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_ENGLISH_TITLE,
-                "sv_SE",
+                LANGUAGE_ID_SV_SE,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_SWEDISH_TITLE)),
         null,
         assetVocabularySettingsHelper.toString(),
@@ -273,11 +277,11 @@ public class StudyProgramCategoryService {
         0,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE,
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_ENGLISH_TITLE,
-                "sv_SE",
+                LANGUAGE_ID_SV_SE,
                 StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_SWEDISH_TITLE)),
         Map.of(),
         vocabularyId,
@@ -298,11 +302,11 @@ public class StudyProgramCategoryService {
         parentCategoryId,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_FINNISH_TITLE,
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_ENGLISH_TITLE,
-                "sv_SE",
+                LANGUAGE_ID_SV_SE,
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_SWEDISH_TITLE)),
         Map.of(),
         vocabularyId,

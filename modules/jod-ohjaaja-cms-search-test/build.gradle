@@ -20,6 +20,9 @@ dependencies {
   // JUnit 4
   testImplementation group: "junit", name: "junit", version: "4.13.2"
 
+  // Awaitility - DSL for awaiting asynchronous operations (replaces Thread.sleep in tests)
+  testImplementation group: "org.awaitility", name: "awaitility", version: "4.3.0"
+
   // Liferay APIs
   testImplementation group: "com.liferay.portal", name: "release.portal.api", version: "7.4.3.132-ga132"
   testImplementation group: "com.liferay.portal", name: "com.liferay.portal.kernel", version: "latest.release"
