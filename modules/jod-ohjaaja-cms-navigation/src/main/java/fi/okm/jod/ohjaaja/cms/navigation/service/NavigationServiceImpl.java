@@ -12,7 +12,10 @@ package fi.okm.jod.ohjaaja.cms.navigation.service;
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.asset.kernel.service.AssetCategoryService;
 import com.liferay.expando.kernel.model.ExpandoBridge;
+import com.liferay.expando.kernel.model.ExpandoColumn;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
+import com.liferay.expando.kernel.model.ExpandoTableConstants;
+import com.liferay.expando.kernel.service.ExpandoColumnLocalServiceUtil;
 import com.liferay.expando.kernel.util.ExpandoBridgeFactoryUtil;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.model.JournalArticleResource;
@@ -21,11 +24,14 @@ import com.liferay.journal.service.JournalArticleService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
+import com.liferay.portal.kernel.security.permission.ActionKeys;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.security.permission.ResourceActionsUtil;
+import com.liferay.portal.kernel.service.ResourcePermissionLocalServiceUtil;
 import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
@@ -478,6 +484,7 @@ public class NavigationServiceImpl implements NavigationService {
             customFieldData.type(),
             customFieldData.defaultValue(),
             customFieldData.propertyDisplayType());
+        grantUserPermissionsForCustomField(customFieldData.name());
 
         customFieldData.localizationMap.forEach(
             (locale, name) -> {
@@ -520,6 +527,31 @@ public class NavigationServiceImpl implements NavigationService {
       expandoBridge.setAttributeProperties(customFieldName, unicodeProperties, false);
       log.info("Added custom field " + customFieldName);
     }
+  }
+
+  private void grantUserPermissionsForCustomField(String customFieldName) throws PortalException {
+    var companyId = PortalUtil.getDefaultCompanyId();
+    var userRole = RoleLocalServiceUtil.fetchRole(companyId, RoleConstants.USER);
+
+    if (userRole == null) {
+      log.warn("User role not found, cannot grant custom field permissions for " + customFieldName);
+      return;
+    }
+
+    var expandoColumn =
+        ExpandoColumnLocalServiceUtil.getColumn(
+            companyId,
+            SiteNavigationMenuItem.class.getName(),
+            ExpandoTableConstants.DEFAULT_TABLE_NAME,
+            customFieldName);
+
+    ResourcePermissionLocalServiceUtil.setResourcePermissions(
+        companyId,
+        ExpandoColumn.class.getName(),
+        ResourceConstants.SCOPE_INDIVIDUAL,
+        String.valueOf(expandoColumn.getColumnId()),
+        userRole.getRoleId(),
+        new String[] {ActionKeys.VIEW, ActionKeys.UPDATE});
   }
 
   private static UnicodeProperties getUnicodeProperties(String propertyDisplayType) {
