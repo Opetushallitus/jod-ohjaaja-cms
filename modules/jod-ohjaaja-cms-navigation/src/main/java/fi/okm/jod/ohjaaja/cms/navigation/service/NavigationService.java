@@ -15,12 +15,15 @@ import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistenceException;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 
 public interface NavigationService {
   void addOrUpdateStudyProgramNavigationMenuItem(
       JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
-      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection;
+      throws StudyProgramListingMissingException,
+          MultipleStudyProgramListingMenuItemExpection,
+          NavigationMenuItemPersistenceException;
 
   void deleteStudyProgramNavigationMenuItem(String externalReferenceCode) throws PortalException;
 

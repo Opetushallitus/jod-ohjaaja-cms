@@ -145,8 +145,11 @@ public class BndBundleUtil {
 		project.setProperty(
 			"Bundle-Activator", TestBundleActivator.class.getCanonicalName());
 		
-		// Embed JUnit and Hamcrest classes in the bundle so they're available in OSGi runtime
-		project.setProperty("Private-Package", "org.junit.*,junit.*,org.hamcrest.*");
+		// Embed JUnit, Hamcrest and Awaitility classes in the bundle so they're available
+		// in the OSGi runtime (Liferay does not export these packages from any bundle).
+		project.setProperty(
+			"Private-Package",
+			"org.junit.*,junit.*,org.hamcrest.*,org.awaitility.*");
 
 		Set<String> importPackages = new LinkedHashSet<>();
 
@@ -155,6 +158,12 @@ public class BndBundleUtil {
 		importPackages.add("!org.junit.*");
 		importPackages.add("!junit.*");
 		importPackages.add("!org.hamcrest.*");
+		importPackages.add("!org.awaitility.*");
+
+		// Awaitility's proxy DSL pulls in CGLIB/Objenesis. We don't use that DSL,
+		// so drop the optional imports rather than require them at runtime.
+		importPackages.add("!net.sf.cglib.*");
+		importPackages.add("!org.objenesis.*");
 
 		String importPackageString = project.getProperty("Import-Package");
 

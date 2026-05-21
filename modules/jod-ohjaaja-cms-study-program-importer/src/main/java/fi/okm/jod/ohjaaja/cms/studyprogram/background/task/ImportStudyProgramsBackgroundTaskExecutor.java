@@ -44,11 +44,11 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.validation.ValidationException;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -62,6 +62,9 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
   private static final Log log =
       LogFactoryUtil.getLog(ImportStudyProgramsBackgroundTaskExecutor.class);
+
+  private static final Pattern SENTENCE_PATTERN = Pattern.compile("[^.!?]*+[.!?]");
+  private static final Pattern WORD_PATTERN = Pattern.compile("\\S++");
 
   @Reference private DDM ddm;
   @Reference private JournalConverter journalConverter;
@@ -106,7 +109,11 @@ public class ImportStudyProgramsBackgroundTaskExecutor
         studyProgramImporter.getImportedStudyPrograms().stream()
             .map(JournalArticleModel::getExternalReferenceCode)
             .toList();
-    var importedStudyPrograms = new ArrayList<String>();
+    // Set of oids that will be present after this run. importStudyProgram() catches and
+    // logs all exceptions, so every incoming program is considered "kept" regardless of
+    // per-item outcome
+    var importedStudyProgramOids =
+        studyPrograms.stream().map(StudyProgramDto::oid).collect(Collectors.toSet());
 
     for (int i = 0; i < studyPrograms.size(); i++) {
 
@@ -124,13 +131,12 @@ public class ImportStudyProgramsBackgroundTaskExecutor
       var studyProgram = studyPrograms.get(i);
 
       importStudyProgram(studyProgram, structure, user, backgroundTask, serviceContext);
-      importedStudyPrograms.add(studyProgram.oid());
 
       status.setAttribute("progress", (i + 1) * 100 / studyPrograms.size());
     }
 
     currentStudyProgramArticleExternalReferenceCodes.stream()
-        .filter(externalReferenceCode -> !importedStudyPrograms.contains(externalReferenceCode))
+        .filter(externalReferenceCode -> !importedStudyProgramOids.contains(externalReferenceCode))
         .forEach(
             externalReferenceCode -> {
               try {
@@ -228,7 +234,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     var stripped = HtmlUtil.stripHtml(text).trim();
     var ingress = new StringBuilder();
     int length = 0;
-    var matcher = Pattern.compile("[^.!?]*[.!?]").matcher(stripped);
+    var matcher = SENTENCE_PATTERN.matcher(stripped);
     while (matcher.find()) {
       String sentence = matcher.group().trim();
       if (length > 0 && (length + sentence.length() > 80)) break;
@@ -237,7 +243,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     }
     if (length == 0) {
       // No sentence found, fallback to matching words and cutting at 80 chars
-      var wordMatcher = Pattern.compile("\\S+").matcher(stripped);
+      var wordMatcher = WORD_PATTERN.matcher(stripped);
       while (wordMatcher.find()) {
         String word = wordMatcher.group();
         if (length > 0 && (length + word.length() + 1 > 80)) break;

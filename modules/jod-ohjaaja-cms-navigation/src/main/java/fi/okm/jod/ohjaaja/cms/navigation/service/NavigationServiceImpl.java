@@ -50,6 +50,8 @@ import com.liferay.site.navigation.util.comparator.SiteNavigationMenuItemOrderCo
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationItemDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationInitializationException;
+import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistenceException;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication;
 import java.io.Serializable;
@@ -66,6 +68,12 @@ public class NavigationServiceImpl implements NavigationService {
 
   private static final Long GROUP_ID = 20117L; // JOD OHJAAJA group ID
 
+  private static final String LANGUAGE_ID_EN_US = "en_US";
+  private static final String LANGUAGE_ID_FI_FI = "fi_FI";
+
+  private static final String PROPERTY_CLASS_PK = "classPK";
+  private static final String PROPERTY_TITLE = "title";
+
   private static final String ASSET_CATEGORY_CLASS_NAME =
       "com.liferay.asset.kernel.model.AssetCategory";
   private static final String JOURNAL_ARTICLE_CLASS_NAME =
@@ -73,7 +81,7 @@ public class NavigationServiceImpl implements NavigationService {
 
   private static final String SAP_ENTRY_NAME = "JOD_OHJAAJA_NAVIGATION";
   private static final Map<Locale, String> SAP_DESCRIPTION =
-      Map.of(LocaleUtil.fromLanguageId("en_US"), "Public access JOD OHJAAJA NAVIGATION");
+      Map.of(LocaleUtil.fromLanguageId(LANGUAGE_ID_EN_US), "Public access JOD OHJAAJA NAVIGATION");
   private static final String SERVICE_SIGNATURE = NavigationRestApplication.class.getName() + "#*";
 
   private static final String TYPE_CUSTOM_FIELD_NAME = "Type";
@@ -93,16 +101,16 @@ public class NavigationServiceImpl implements NavigationService {
             ExpandoColumnConstants.STRING_ARRAY,
             new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"},
             ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
-            Map.of("fi_FI", "Tyyppi", "en_US", "Type")),
+            Map.of(LANGUAGE_ID_FI_FI, "Tyyppi", LANGUAGE_ID_EN_US, "Type")),
         new CustomFieldData(
             HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
             ExpandoColumnConstants.BOOLEAN,
             false,
             ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 "Piilota uusien karusellista etusivulta",
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 "Hide from the homepage new items carousel")),
         new CustomFieldData(
             HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
@@ -110,9 +118,9 @@ public class NavigationServiceImpl implements NavigationService {
             false,
             ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 "Piilota suosittujen karusellista etusivulta",
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 "Hide from the homepage most viewed carousel")),
         new CustomFieldData(
             HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
@@ -120,9 +128,9 @@ public class NavigationServiceImpl implements NavigationService {
             false,
             ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 "Piilota uusien karusellista pääkategoriasivulta",
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 "Hide from the main category page new items carousel")),
         new CustomFieldData(
             HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
@@ -130,9 +138,9 @@ public class NavigationServiceImpl implements NavigationService {
             false,
             ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
             Map.of(
-                "fi_FI",
+                LANGUAGE_ID_FI_FI,
                 "Piilota suosittujen karusellista pääkategoriasivulta",
-                "en_US",
+                LANGUAGE_ID_EN_US,
                 "Hide from the main category page most viewed carousel"))
       };
 
@@ -170,7 +178,9 @@ public class NavigationServiceImpl implements NavigationService {
   @Override
   public void addOrUpdateStudyProgramNavigationMenuItem(
       JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
-      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection {
+      throws StudyProgramListingMissingException,
+          MultipleStudyProgramListingMenuItemExpection,
+          NavigationMenuItemPersistenceException {
     var studyProgramsParentMenuItem = getStudyProgramsParentMenuItem();
 
     try {
@@ -183,9 +193,11 @@ public class NavigationServiceImpl implements NavigationService {
           JournalArticle.class.getName(),
           UnicodePropertiesBuilder.create(true)
               .put("classNameId", String.valueOf(PortalUtil.getClassNameId(JournalArticle.class)))
-              .put("classPK", String.valueOf(studyProgramJournalArticle.getResourcePrimKey()))
+              .put(
+                  PROPERTY_CLASS_PK,
+                  String.valueOf(studyProgramJournalArticle.getResourcePrimKey()))
               .put("classTypeId", String.valueOf(studyProgramJournalArticle.getDDMStructureId()))
-              .put("title", String.valueOf(studyProgramJournalArticle.getTitle()))
+              .put(PROPERTY_TITLE, String.valueOf(studyProgramJournalArticle.getTitle()))
               .put(
                   "type",
                   ResourceActionsUtil.getModelResource(
@@ -194,7 +206,10 @@ public class NavigationServiceImpl implements NavigationService {
               .buildString(),
           serviceContext);
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new NavigationMenuItemPersistenceException(
+          "Failed to add or update study program navigation menu item for article "
+              + studyProgramJournalArticle.getExternalReferenceCode(),
+          e);
     }
   }
 
@@ -281,6 +296,8 @@ public class NavigationServiceImpl implements NavigationService {
     var nameI18n = getNameI18n(assetCategory, journalArticle, type);
     var description = getDescription(assetCategory, journalArticle, type, languageId);
     var descriptionI18n = getDescriptionI18n(assetCategory, journalArticle, type);
+    var externalReferenceCode =
+        resolveExternalReferenceCode(siteNavigationMenuItem, assetCategory, journalArticle);
 
     return new NavigationItemDto(
         siteNavigationMenuItem.getSiteNavigationMenuItemId(),
@@ -297,11 +314,7 @@ public class NavigationServiceImpl implements NavigationService {
             siteNavigationMenuItem, HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME),
         getBooleanCustomFieldValue(
             siteNavigationMenuItem, HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME),
-        assetCategory != null
-            ? assetCategory.getExternalReferenceCode()
-            : (journalArticle != null)
-                ? journalArticle.getExternalReferenceCode()
-                : siteNavigationMenuItem.getExternalReferenceCode(),
+        externalReferenceCode,
         (journalArticle != null) ? journalArticle.getResourcePrimKey() : null,
         (assetCategory != null) ? assetCategory.getCategoryId() : null,
         siteNavigationMenuItemsMap
@@ -316,6 +329,19 @@ public class NavigationServiceImpl implements NavigationService {
         siteNavigationMenuItem.getParentSiteNavigationMenuItemId());
   }
 
+  private String resolveExternalReferenceCode(
+      SiteNavigationMenuItem siteNavigationMenuItem,
+      AssetCategory assetCategory,
+      JournalArticle journalArticle) {
+    if (assetCategory != null) {
+      return assetCategory.getExternalReferenceCode();
+    }
+    if (journalArticle != null) {
+      return journalArticle.getExternalReferenceCode();
+    }
+    return siteNavigationMenuItem.getExternalReferenceCode();
+  }
+
   private SiteNavigationMenuItemType getSiteNavigationMenuItemType(
       SiteNavigationMenuItem siteNavigationMenuItem) {
     return switch (siteNavigationMenuItem.getType()) {
@@ -327,7 +353,7 @@ public class NavigationServiceImpl implements NavigationService {
 
   private UnicodeProperties getUnicodeProperties(SiteNavigationMenuItem siteNavigationMenuItem) {
     if (siteNavigationMenuItem == null) {
-      return null;
+      return new UnicodeProperties();
     }
     return UnicodePropertiesBuilder.fastLoad(siteNavigationMenuItem.getTypeSettings()).build();
   }
@@ -338,7 +364,8 @@ public class NavigationServiceImpl implements NavigationService {
       return null;
     }
     try {
-      return assetCategoryService.fetchCategory(Long.parseLong(unicodeProperties.get("classPK")));
+      return assetCategoryService.fetchCategory(
+          Long.parseLong(unicodeProperties.get(PROPERTY_CLASS_PK)));
     } catch (PortalException e) {
       return null;
     }
@@ -350,7 +377,8 @@ public class NavigationServiceImpl implements NavigationService {
       return null;
     }
     try {
-      var journalArticleResourcePrimaryKey = Long.parseLong(unicodeProperties.get("classPK"));
+      var journalArticleResourcePrimaryKey =
+          Long.parseLong(unicodeProperties.get(PROPERTY_CLASS_PK));
       JournalArticleResource journalArticleResource =
           journalArticleResourceLocalService.getArticleResource(journalArticleResourcePrimaryKey);
       return journalArticleService.getArticle(journalArticleResource.getLatestArticlePK());
@@ -370,10 +398,12 @@ public class NavigationServiceImpl implements NavigationService {
       case ASSET_CATEGORY ->
           (category != null)
               ? category.getTitle(languageId)
-              : unicodeProperties.getProperty("title");
+              : unicodeProperties.getProperty(PROPERTY_TITLE);
       case JOURNAL_ARTICLE ->
-          (article != null) ? article.getTitle(languageId) : unicodeProperties.getProperty("title");
-      default -> unicodeProperties.getProperty("title");
+          (article != null)
+              ? article.getTitle(languageId)
+              : unicodeProperties.getProperty(PROPERTY_TITLE);
+      default -> unicodeProperties.getProperty(PROPERTY_TITLE);
     };
   }
 
@@ -454,7 +484,8 @@ public class NavigationServiceImpl implements NavigationService {
           SAP_DESCRIPTION,
           new ServiceContext());
     } catch (PortalException e) {
-      throw new RuntimeException(e);
+      throw new NavigationInitializationException(
+          "Failed to initialize service access policy " + SAP_ENTRY_NAME, e);
     }
   }
 
@@ -507,7 +538,8 @@ public class NavigationServiceImpl implements NavigationService {
       }
 
     } catch (PortalException e) {
-      throw new RuntimeException(e);
+      throw new NavigationInitializationException(
+          "Failed to initialize navigation custom fields", e);
     }
   }
 

@@ -43,6 +43,19 @@ public class StudyProgramStructureService {
   private static final String FIELDSET_KEY = "LINK-FIELD-SET";
   private static final String FIELDSET_FIELD_NAME = "FieldsetLink";
 
+  private static final String FIELD_LINK_TEXT = "linktext";
+  private static final String FIELD_LINK_URL = "linkurl";
+  private static final String FIELD_INGRESS = "ingress";
+  private static final String FIELD_CONTENT = "content";
+  private static final String FIELD_IMAGE = "image";
+
+  private static final String INDEX_TYPE_KEYWORD = "keyword";
+  private static final String DATA_TYPE_STRING = "string";
+
+  private static final String PROPERTY_FIELD_REFERENCE = "fieldReference";
+
+  private static final String LABEL_LINKKI = "Linkki";
+
   @Reference private DDMStructureLocalService ddmStructureLocalService;
   @Reference private DDMStructureLayoutLocalService ddmStructureLayoutLocalService;
   @Reference private DEDataDefinitionFieldLinkLocalService deDataDefinitionFieldLinkLocalService;
@@ -231,28 +244,28 @@ public class StudyProgramStructureService {
     ddmForm.setAvailableLocales(new HashSet<>(Arrays.asList(fi, sv, en)));
     ddmForm.setDefaultLocale(fi);
 
-    var linkText = new DDMFormField("linktext", DDMFormFieldTypeConstants.TEXT);
+    var linkText = new DDMFormField(FIELD_LINK_TEXT, DDMFormFieldTypeConstants.TEXT);
     linkText.setLocalizable(true);
     linkText.setRequired(false);
-    linkText.setIndexType("keyword");
-    linkText.setDataType("string");
+    linkText.setIndexType(INDEX_TYPE_KEYWORD);
+    linkText.setDataType(DATA_TYPE_STRING);
     linkText.setLabel(lv(fi, sv, en, "Kuvaus", "Text", "Text"));
-    linkText.setProperty("fieldReference", "linktext");
+    linkText.setProperty(PROPERTY_FIELD_REFERENCE, FIELD_LINK_TEXT);
 
     ddmForm.addDDMFormField(linkText);
 
-    var linkUrl = new DDMFormField("linkurl", DDMFormFieldTypeConstants.TEXT);
+    var linkUrl = new DDMFormField(FIELD_LINK_URL, DDMFormFieldTypeConstants.TEXT);
     linkUrl.setLocalizable(true);
     linkUrl.setRequired(false);
-    linkUrl.setIndexType("keyword");
-    linkUrl.setDataType("string");
-    linkUrl.setLabel(lv(fi, sv, en, "Linkki", "Länk", "Link"));
-    linkUrl.setProperty("fieldReference", "linkurl");
+    linkUrl.setIndexType(INDEX_TYPE_KEYWORD);
+    linkUrl.setDataType(DATA_TYPE_STRING);
+    linkUrl.setLabel(lv(fi, sv, en, LABEL_LINKKI, "Länk", "Link"));
+    linkUrl.setProperty(PROPERTY_FIELD_REFERENCE, FIELD_LINK_URL);
     ddmForm.addDDMFormField(linkUrl);
 
-    var layout = oneColumnLayout(fi, "linktext", "linkurl");
+    var layout = oneColumnLayout(fi, FIELD_LINK_TEXT, FIELD_LINK_URL);
 
-    var nameMap = localizeMap(fi, sv, en, "Linkki", "Länk", "Link");
+    var nameMap = localizeMap(fi, sv, en, LABEL_LINKKI, "Länk", "Link");
     var descMap =
         localizeMap(
             fi,
@@ -290,32 +303,32 @@ public class StudyProgramStructureService {
     ddmForm.setAvailableLocales(new HashSet<>(Arrays.asList(fi, sv, en)));
     ddmForm.setDefaultLocale(fi);
 
-    var ingress = new DDMFormField("ingress", DDMFormFieldTypeConstants.TEXT);
+    var ingress = new DDMFormField(FIELD_INGRESS, DDMFormFieldTypeConstants.TEXT);
     ingress.setLocalizable(true);
     ingress.setRequired(true);
     ingress.setIndexType("text");
-    ingress.setDataType("string");
+    ingress.setDataType(DATA_TYPE_STRING);
     ingress.setLabel(lv(fi, sv, en, "Tiivistelmä", "Ingress", "Ingress"));
-    ingress.setProperty("fieldReference", "ingress");
+    ingress.setProperty(PROPERTY_FIELD_REFERENCE, FIELD_INGRESS);
     ddmForm.addDDMFormField(ingress);
 
-    var content = new DDMFormField("content", DDMFormFieldTypeConstants.RICH_TEXT);
+    var content = new DDMFormField(FIELD_CONTENT, DDMFormFieldTypeConstants.RICH_TEXT);
     content.setLocalizable(true);
     content.setRequired(true);
     content.setIndexType("text");
     content.setDataType("html");
     content.setLabel(lv(fi, sv, en, "Sisältö", "Description", "Content"));
-    content.setProperty("fieldReference", "content");
+    content.setProperty(PROPERTY_FIELD_REFERENCE, FIELD_CONTENT);
     ddmForm.addDDMFormField(content);
 
-    var image = new DDMFormField("image", DDMFormFieldTypeConstants.IMAGE);
+    var image = new DDMFormField(FIELD_IMAGE, DDMFormFieldTypeConstants.IMAGE);
     image.setLocalizable(true);
     image.setRequired(false);
-    image.setIndexType("keyword");
-    image.setDataType("image");
+    image.setIndexType(INDEX_TYPE_KEYWORD);
+    image.setDataType(FIELD_IMAGE);
     image.setLabel(lv(fi, sv, en, "Kuva", "Image", "Image"));
-    image.setProperty("fieldReference", "image");
-    image.setProperty("dataType", "image");
+    image.setProperty(PROPERTY_FIELD_REFERENCE, FIELD_IMAGE);
+    image.setProperty("dataType", FIELD_IMAGE);
     ddmForm.addDDMFormField(image);
 
     var linkRef = new DDMFormField(FIELDSET_FIELD_NAME, DDMFormFieldTypeConstants.FIELDSET);
@@ -323,8 +336,8 @@ public class StudyProgramStructureService {
     linkRef.setRequired(false);
     linkRef.setIndexType("none");
     linkRef.setRepeatable(true);
-    linkRef.setLabel(lv(fi, sv, en, "Linkki", "Länk", "Link"));
-    linkRef.setProperty("fieldReference", "link");
+    linkRef.setLabel(lv(fi, sv, en, LABEL_LINKKI, "Länk", "Link"));
+    linkRef.setProperty(PROPERTY_FIELD_REFERENCE, "link");
 
     linkRef.setProperty("ddmStructureId", linkFieldSet.getStructureId());
     linkRef.setProperty("ddmStructureKey", linkFieldSet.getStructureKey());
@@ -347,7 +360,8 @@ public class StudyProgramStructureService {
 
     ddmForm.addDDMFormField(linkRef);
 
-    var layout = oneColumnLayout(fi, "ingress", "content", "image", FIELDSET_FIELD_NAME);
+    var layout =
+        oneColumnLayout(fi, FIELD_INGRESS, FIELD_CONTENT, FIELD_IMAGE, FIELDSET_FIELD_NAME);
 
     var nameMap =
         localizeMap(fi, sv, en, "Koulutustarjonta", "Utbildningserbjudande", "Study Program");

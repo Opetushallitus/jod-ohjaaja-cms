@@ -32,6 +32,7 @@ import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.portlet.asset.util.AssetVocabularySettingsHelper;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodCategoryType;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
+import fi.okm.jod.ohjaaja.cms.tags.exception.TagsServiceException;
 import java.util.Locale;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
@@ -161,7 +162,8 @@ public class JodOhjaajaCmsTagsDtoConverter
                 AssetVocabularyConstants.VISIBILITY_TYPE_PUBLIC,
                 new ServiceContext());
       } catch (PortalException e) {
-        throw new RuntimeException(e);
+        throw new TagsServiceException(
+            "Failed to create tag vocabulary " + JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE, e);
       }
     }
 

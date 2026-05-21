@@ -108,20 +108,14 @@
 
   <c:if test='<%= "import".equals(action) %>'>
     <div id="<portlet:namespace />message" class="text-muted small mb-2"></div>
-    <div class="progress-group progress-info">
-      <div class="progress">
-        <div
-            id="<portlet:namespace />progress-value"
-            aria-valuenow="0"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            class="progress-bar"
-            role="progressbar"
-            style="width:0;"
-        >
-
-        </div>
-      </div>
+    <div class="progress-group progress-info d-flex align-items-center">
+      <progress
+          id="<portlet:namespace />progress-value"
+          class="progress-bar flex-grow-1"
+          max="100"
+          value="0"
+      ></progress>
+      <span id="<portlet:namespace />progress-text" class="ml-2" aria-hidden="true">0%</span>
     </div>
   </c:if>
 
@@ -154,20 +148,14 @@
 
     <c:if test='<%= "delete".equals(action) %>'>
       <div id="<portlet:namespace />message" class="text-muted small mb-2"></div>
-      <div class="progress-group progress-info">
-        <div class="progress">
-          <div
-              id="<portlet:namespace />progress-value"
-              aria-valuenow="0"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              class="progress-bar"
-              role="progressbar"
-              style="width:0;"
-          >
-
-          </div>
-        </div>
+      <div class="progress-group progress-info d-flex align-items-center">
+        <progress
+            id="<portlet:namespace />progress-value"
+            class="progress-bar flex-grow-1"
+            max="100"
+            value="0"
+        ></progress>
+        <span id="<portlet:namespace />progress-text" class="ml-2" aria-hidden="true">0%</span>
       </div>
     </c:if>
   </c:if>
@@ -192,9 +180,14 @@
         .then((data) => {
 
           document.querySelector("#<portlet:namespace />message").innerText = data.message;
-          document.querySelector("#<portlet:namespace />progress-value").innerText = data.progress + '%';
-          document.querySelector("#<portlet:namespace />progress-value").style.width = data.progress + '%';
-          document.querySelector("#<portlet:namespace />progress-value").setAttribute('aria-valuenow', data.progress);
+          const progressEl = document.querySelector("#<portlet:namespace />progress-value");
+          if (progressEl) {
+            progressEl.value = data.progress;
+          }
+          const progressTextEl = document.querySelector("#<portlet:namespace />progress-text");
+          if (progressTextEl) {
+            progressTextEl.innerText = data.progress + '%';
+          }
 
           if (!data.complete && !data.error) {
             setTimeout(() => pollImportStatus(taskId), 1000);

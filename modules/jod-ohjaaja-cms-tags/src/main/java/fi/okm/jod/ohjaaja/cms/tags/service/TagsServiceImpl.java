@@ -20,9 +20,9 @@ import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodCategoryType;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
+import fi.okm.jod.ohjaaja.cms.tags.exception.TagsServiceException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -48,10 +48,10 @@ public class TagsServiceImpl implements TagsService {
                       assetCategory.getName(),
                       LocalizedMapUtil.getI18nMap(assetCategory.getTitleMap()),
                       JodCategoryType.TAG))
-          .collect(Collectors.toList());
+          .toList();
 
     } catch (PortalException e) {
-      return null;
+      return List.of();
     }
   }
 
@@ -60,7 +60,7 @@ public class TagsServiceImpl implements TagsService {
       Long categoryId,
       String externalReferenceCode,
       String name,
-      Map<String, String> name_i18n,
+      Map<String, String> nameI18n,
       Long siteId) {
     try {
       var tagVocabulary =
@@ -69,30 +69,28 @@ public class TagsServiceImpl implements TagsService {
 
       var user = GuestOrUserUtil.getGuestOrUser(PortalUtil.getDefaultCompanyId());
       if (categoryId == null) {
-        // Create new category
         var assetCategory =
             assetCategoryLocalService.addCategory(
                 externalReferenceCode,
                 user.getUserId(),
                 siteId,
                 0,
-                LocalizedMapUtil.getLocalizedMap(name_i18n),
+                LocalizedMapUtil.getLocalizedMap(nameI18n),
                 Map.of(),
                 tagVocabulary.getVocabularyId(),
                 null,
                 new ServiceContext());
         assetCategoryLocalService.addCategoryResources(assetCategory, true, true);
       } else {
-        // Update existing category
         var assetCategory = assetCategoryLocalService.getAssetCategory(categoryId);
         assetCategory.setExternalReferenceCode(externalReferenceCode);
         assetCategory.setName(name);
-        assetCategory.setTitleMap(LocalizedMapUtil.getLocalizedMap(name_i18n));
+        assetCategory.setTitleMap(LocalizedMapUtil.getLocalizedMap(nameI18n));
         assetCategoryLocalService.updateAssetCategory(assetCategory);
         assetCategoryLocalService.addCategoryResources(assetCategory, true, true);
       }
     } catch (PortalException e) {
-      throw new RuntimeException("Failed to add or update taxonomy category", e);
+      throw new TagsServiceException("Failed to add or update taxonomy category", e);
     }
   }
 }

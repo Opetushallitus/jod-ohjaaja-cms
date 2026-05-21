@@ -26,7 +26,9 @@ import com.liferay.portal.kernel.util.StringUtil;
 import java.util.Locale;
 import java.util.Map;
 
-public class StudyProgramImporterUtil {
+public final class StudyProgramImporterUtil {
+  private StudyProgramImporterUtil() {}
+
   public static LocalizedValue localized(String value, Locale locale) {
     var lv = new LocalizedValue(locale);
     lv.addString(locale, value);

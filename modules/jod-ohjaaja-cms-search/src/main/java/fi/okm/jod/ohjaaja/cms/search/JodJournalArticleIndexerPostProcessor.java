@@ -162,7 +162,7 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
       }
       var fileEntryId = jsonObject.getString("fileEntryId");
       var fileEntry = dlFileEntryLocalService.getDLFileEntry(Long.parseLong(fileEntryId));
-      var text = _extractText(fileEntry);
+      var text = extractText(fileEntry);
 
       if (text != null) {
         return Stream.of(StringPool.SPACE.concat(text));
@@ -175,17 +175,17 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
     return Stream.empty();
   }
 
-  private String _getIndexVersionLabel(DLFileEntry dlFileEntry) throws PortalException {
+  private String getIndexVersionLabel(DLFileEntry dlFileEntry) throws PortalException {
     var dlFileVersion = dlFileEntry.getFileVersion();
     return dlFileVersion.getStoreFileName() + ".index";
   }
 
-  private String _extractText(DLFileEntry dlFileEntry) throws PortalException, IOException {
+  private String extractText(DLFileEntry dlFileEntry) throws PortalException, IOException {
 
     var dlFileIndexingMaxSize =
         GetterUtil.getInteger(PropsUtil.get(PropsKeys.DL_FILE_INDEXING_MAX_SIZE));
 
-    var indexVersionLabel = _getIndexVersionLabel(dlFileEntry);
+    var indexVersionLabel = getIndexVersionLabel(dlFileEntry);
 
     if (dlStore.hasFile(
         dlFileEntry.getCompanyId(),
@@ -213,7 +213,7 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
           indexVersionLabel);
     }
 
-    var inputStream = _getInputStream(dlFileEntry);
+    var inputStream = getInputStream(dlFileEntry);
 
     if (inputStream == null) {
       return null;
@@ -235,9 +235,9 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
     return text;
   }
 
-  private InputStream _getInputStream(DLFileEntry dlFileEntry) {
+  private InputStream getInputStream(DLFileEntry dlFileEntry) {
     try {
-      if (!_isIndexContent(dlFileEntry)) {
+      if (!isIndexContent(dlFileEntry)) {
         return null;
       }
 
@@ -253,7 +253,7 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
     }
   }
 
-  private boolean _isIndexContent(DLFileEntry dlFileEntry) {
+  private boolean isIndexContent(DLFileEntry dlFileEntry) {
     var ignoreExtensions =
         prefsProps.getStringArray(PropsKeys.DL_FILE_INDEXING_IGNORE_EXTENSIONS, StringPool.COMMA);
 
@@ -261,16 +261,25 @@ public class JodJournalArticleIndexerPostProcessor implements IndexerPostProcess
   }
 
   @Override
-  public void postProcessFullQuery(BooleanQuery booleanQuery, SearchContext searchContext) {}
+  public void postProcessFullQuery(BooleanQuery booleanQuery, SearchContext searchContext) {
+    // No-op: this post processor only customizes document indexing via postProcessDocument and
+    // does not need to modify the full search query.
+  }
 
   @Override
   public void postProcessSearchQuery(
-      BooleanQuery booleanQuery, BooleanFilter booleanFilter, SearchContext searchContext) {}
+      BooleanQuery booleanQuery, BooleanFilter booleanFilter, SearchContext searchContext) {
+    // No-op: this post processor does not need to adjust the search query or its filters.
+  }
 
   @Override
-  public void postProcessSummary(Summary summary, Document document, Locale locale, String s) {}
+  public void postProcessSummary(Summary summary, Document document, Locale locale, String s) {
+    // No-op: this post processor does not customize the search result summary.
+  }
 
   @Override
   public void postProcessContextBooleanFilter(
-      BooleanFilter booleanFilter, SearchContext searchContext) {}
+      BooleanFilter booleanFilter, SearchContext searchContext) {
+    // No-op: this post processor does not add context-level boolean filters.
+  }
 }

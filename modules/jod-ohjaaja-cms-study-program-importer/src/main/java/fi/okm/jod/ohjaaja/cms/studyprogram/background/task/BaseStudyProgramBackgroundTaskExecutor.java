@@ -29,7 +29,15 @@ public abstract class BaseStudyProgramBackgroundTaskExecutor extends BaseBackgro
   private static final Log log =
       LogFactoryUtil.getLog(BaseStudyProgramBackgroundTaskExecutor.class);
 
+  /**
+   * Required by the Liferay {@link BackgroundTaskExecutor} interface (not by {@link
+   * Object#clone()}). Liferay's framework calls this to obtain an executor instance to run a task;
+   * returning {@code this} matches Liferay's documented pattern and reuses the same stateless
+   * executor instance. A copy constructor or {@code super.clone()} is not appropriate here because
+   * the class is not {@link Cloneable} and no per-task state needs to be duplicated.
+   */
   @Override
+  @SuppressWarnings({"java:S2975", "java:S1182"})
   public BackgroundTaskExecutor clone() {
     return this;
   }

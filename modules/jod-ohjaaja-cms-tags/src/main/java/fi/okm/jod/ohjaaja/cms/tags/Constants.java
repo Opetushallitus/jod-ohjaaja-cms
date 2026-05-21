@@ -9,6 +9,8 @@
 
 package fi.okm.jod.ohjaaja.cms.tags;
 
-public class Constants {
+public final class Constants {
   public static final String JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE = "jod-ohjaaja-cms-tags";
+
+  private Constants() {}
 }

@@ -56,6 +56,10 @@ import org.osgi.service.component.annotations.Reference;
 public class StudyProgramImporterPortlet extends MVCPortlet {
 
   private static final Log log = LogFactoryUtil.getLog(StudyProgramImporterPortlet.class);
+
+  private static final String ATTRIBUTE_TASK_ID = "taskId";
+  private static final String JSON_PROGRESS = "progress";
+
   @Reference private StudyProgramService studyProgramService;
   @Reference private StudyProgramBackgroundTaskService studyProgramBackgroundTaskService;
 
@@ -80,7 +84,7 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
 
       if (!latestImportTask.isCompleted()) {
         renderRequest.setAttribute(
-            "taskId", String.valueOf(latestImportTask.getBackgroundTaskId()));
+            ATTRIBUTE_TASK_ID, String.valueOf(latestImportTask.getBackgroundTaskId()));
       }
       var errors =
           latestImportTask.getTaskContextMap().getOrDefault("errors", new ArrayList<String>());
@@ -102,7 +106,7 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
 
       if (!latestDeleteTask.isCompleted()) {
         renderRequest.setAttribute(
-            "taskId", String.valueOf(latestDeleteTask.getBackgroundTaskId()));
+            ATTRIBUTE_TASK_ID, String.valueOf(latestDeleteTask.getBackgroundTaskId()));
       }
       var errors =
           latestDeleteTask.getTaskContextMap().getOrDefault("errors", new ArrayList<String>());
@@ -113,12 +117,13 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
     super.doView(renderRequest, renderResponse);
   }
 
+  @SuppressWarnings("java:S1172")
   public void importAction(ActionRequest request, ActionResponse response) {
     ThemeDisplay themeDisplay = (ThemeDisplay) request.getAttribute(WebKeys.THEME_DISPLAY);
     try {
       var task = studyProgramBackgroundTaskService.startImportTask(themeDisplay.getUserId());
       request.setAttribute("current-action", "import");
-      request.getPortletSession().setAttribute("taskId", task.getBackgroundTaskId());
+      request.getPortletSession().setAttribute(ATTRIBUTE_TASK_ID, task.getBackgroundTaskId());
 
     } catch (Exception e) {
       log.error("import-error", e);
@@ -130,7 +135,7 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
   public void serveResource(ResourceRequest request, ResourceResponse response) throws IOException {
     ThemeDisplay themeDisplay = (ThemeDisplay) request.getAttribute(WebKeys.THEME_DISPLAY);
 
-    long backgroundTaskId = ParamUtil.getLong(request, "taskId");
+    long backgroundTaskId = ParamUtil.getLong(request, ATTRIBUTE_TASK_ID);
 
     JSONObject json = JSONFactoryUtil.createJSONObject();
 
@@ -140,7 +145,7 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
       if (task != null) {
         if (task.isCompleted()) {
 
-          json.put("progress", 100);
+          json.put(JSON_PROGRESS, 100);
           json.put("message", themeDisplay.translate("studyprogram.completed"));
           json.put("status", BackgroundTaskConstants.STATUS_SUCCESSFUL);
           json.put("complete", task.isCompleted());
@@ -148,11 +153,11 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
           BackgroundTaskStatus status =
               BackgroundTaskStatusRegistryUtil.getBackgroundTaskStatus(task.getBackgroundTaskId());
 
-          int progress = GetterUtil.getInteger(status.getAttribute("progress"), 0);
+          int progress = GetterUtil.getInteger(status.getAttribute(JSON_PROGRESS), 0);
           String message =
               themeDisplay.translate(GetterUtil.getString(status.getAttribute("phase"), ""));
 
-          json.put("progress", progress);
+          json.put(JSON_PROGRESS, progress);
           json.put("message", message);
           json.put("status", task.getStatus());
           json.put("complete", task.isCompleted());
@@ -168,12 +173,13 @@ public class StudyProgramImporterPortlet extends MVCPortlet {
     response.getWriter().write(json.toString());
   }
 
+  @SuppressWarnings("java:S1172")
   public void deleteAllAction(ActionRequest request, ActionResponse response) {
     ThemeDisplay themeDisplay = (ThemeDisplay) request.getAttribute(WebKeys.THEME_DISPLAY);
 
     try {
       var task = studyProgramBackgroundTaskService.startDeleteTask(themeDisplay.getUserId());
-      request.getPortletSession().setAttribute("taskId", task.getBackgroundTaskId());
+      request.getPortletSession().setAttribute(ATTRIBUTE_TASK_ID, task.getBackgroundTaskId());
       request.setAttribute("current-action", "delete");
     } catch (Exception e) {
       log.error("delete-error", e);

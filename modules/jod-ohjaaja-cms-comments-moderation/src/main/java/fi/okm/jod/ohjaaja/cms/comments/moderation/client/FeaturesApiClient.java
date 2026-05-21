@@ -67,6 +67,9 @@ public class FeaturesApiClient {
                 + ", Response: "
                 + response.body());
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("Interrupted while setting feature toggle: " + feature, e);
     } catch (Exception e) {
       log.error("Failed to set feature toggle: " + feature, e);
     }
@@ -97,6 +100,10 @@ public class FeaturesApiClient {
       return objectMapper.readValue(
           response.body(),
           objectMapper.getTypeFactory().constructCollectionType(List.class, FeatureFlagDto.class));
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("Interrupted while fetching feature flags", e);
+      return List.of();
     } catch (Exception e) {
       log.error("Failed to fetch feature flags", e);
       return List.of();

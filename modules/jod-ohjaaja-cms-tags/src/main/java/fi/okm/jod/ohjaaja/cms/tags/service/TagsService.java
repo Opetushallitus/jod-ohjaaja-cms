@@ -20,6 +20,6 @@ public interface TagsService {
       Long categoryId,
       String externalReferenceCode,
       String name,
-      Map<String, String> name_i18n,
+      Map<String, String> nameI18n,
       Long siteId);
 }
