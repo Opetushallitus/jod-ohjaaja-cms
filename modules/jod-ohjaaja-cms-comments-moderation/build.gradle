@@ -1,6 +1,9 @@
 plugins {
   id "com.diffplug.spotless" version "7.0.2"
 }
+repositories {
+  mavenCentral()
+}
 dependencies {
 	compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
   compileInclude "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.7"
