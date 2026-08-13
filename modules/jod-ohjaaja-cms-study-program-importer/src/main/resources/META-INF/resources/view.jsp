@@ -1,7 +1,9 @@
 <%@ page import="com.liferay.journal.model.JournalArticle" %>
 <%@ page import="com.liferay.portal.kernel.language.LanguageUtil" %>
-<%@ page import="javax.portlet.PortletURL" %>
-<%@ page import="javax.portlet.ResourceURL" %>
+<%@ page import="com.liferay.portal.kernel.language.UnicodeLanguageUtil" %>
+<%@ page import="jakarta.portlet.ActionRequest" %>
+<%@ page import="jakarta.portlet.PortletURL" %>
+<%@ page import="jakarta.portlet.ResourceURL" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Optional" %>
 <%@ page import="java.util.Date" %>
@@ -47,10 +49,10 @@
 
 
   PortletURL importURL = renderResponse.createActionURL();
-  importURL.setParameter("javax.portlet.action", "importAction");
+  importURL.setParameter(ActionRequest.ACTION_NAME, "importAction");
 
   PortletURL deleteURL = renderResponse.createActionURL();
-  deleteURL.setParameter("javax.portlet.action", "deleteAllAction");
+  deleteURL.setParameter(ActionRequest.ACTION_NAME, "deleteAllAction");
 
   String taskId = (String) request.getAttribute("taskId");
   String action = (String) request.getAttribute("current-action");
@@ -61,7 +63,14 @@
     statusURL.setParameter("taskId", taskId);
   }
 
+  // Reloaded once the task has finished, without the parameters that trigger polling
+  PortletURL viewURL = renderResponse.createRenderURL();
+  viewURL.setParameter("taskId", "");
+  viewURL.setParameter("current-action", "");
 
+  String successMessageKey = "delete".equals(action)
+      ? "studyprogram.delete.success"
+      : "studyprogram.import.success";
 %>
 
 <div class="container bg-white mt-4 p-5">
@@ -106,7 +115,7 @@
     </button>
   </form>
 
-  <c:if test='<%= "import".equals(action) %>'>
+  <c:if test='<%= taskId != null && "import".equals(action) %>'>
     <div id="<portlet:namespace />message" class="text-muted small mb-2"></div>
     <div class="progress-group progress-info d-flex align-items-center">
       <progress
@@ -146,7 +155,7 @@
       </button>
     </form>
 
-    <c:if test='<%= "delete".equals(action) %>'>
+    <c:if test='<%= taskId != null && "delete".equals(action) %>'>
       <div id="<portlet:namespace />message" class="text-muted small mb-2"></div>
       <div class="progress-group progress-info d-flex align-items-center">
         <progress
@@ -164,50 +173,68 @@
 
 </div>
 
-<script>
-  function pollImportStatus(taskId) {
-    const importButton = document.querySelector("#<portlet:namespace />importButton");
-    importButton.disabled = true;
-    const deleteButton = document.querySelector("#<portlet:namespace />deleteButton");
-    if (deleteButton) {
-      deleteButton.disabled = true;
-    }
+<c:if test="<%= taskId != null %>">
+  <aui:script>
+    (function () {
+      const statusUrl = '<%= statusURL.toString() %>';
+      const viewUrl = '<%= viewURL.toString() %>';
+      const successMessage = '<%= UnicodeLanguageUtil.get(request, successMessageKey) %>';
 
-    const url = '<%= statusURL.toString() %>';
+      const importButton = document.getElementById('<portlet:namespace />importButton');
+      const deleteButton = document.getElementById('<portlet:namespace />deleteButton');
+      const messageEl = document.getElementById('<portlet:namespace />message');
+      const progressEl = document.getElementById('<portlet:namespace />progress-value');
+      const progressTextEl = document.getElementById('<portlet:namespace />progress-text');
 
-    fetch(url.toString())
-        .then((res) => res.json())
-        .then((data) => {
-
-          document.querySelector("#<portlet:namespace />message").innerText = data.message;
-          const progressEl = document.querySelector("#<portlet:namespace />progress-value");
-          if (progressEl) {
-            progressEl.value = data.progress;
-          }
-          const progressTextEl = document.querySelector("#<portlet:namespace />progress-text");
-          if (progressTextEl) {
-            progressTextEl.innerText = data.progress + '%';
-          }
-
-          if (!data.complete && !data.error) {
-            setTimeout(() => pollImportStatus(taskId), 1000);
-          } else {
-            Liferay.Util.openToast({
-              message: '<%=LanguageUtil.get(request, "studyprogram."+action+".success")%>',
-              type: 'success',
-              displayType: 'snackbar'
-            });
-            importButton.disabled = false;
-            if (deleteButton) {
-              deleteButton.disabled = false;
-            }
-            setTimeout(() => window.location.replace('<portlet:renderURL />'), 1000);
-
+      function disableButtons(disabled) {
+        [importButton, deleteButton].forEach((button) => {
+          if (button) {
+            button.disabled = disabled;
           }
         });
-  }
+      }
 
-  <c:if test="<%= taskId != null %>">
-  pollImportStatus('<%= taskId %>');
-  </c:if>
-</script>
+      function showProgress(data) {
+        if (messageEl) {
+          messageEl.innerText = data.message || '';
+        }
+        if (progressEl) {
+          progressEl.value = data.progress;
+        }
+        if (progressTextEl) {
+          progressTextEl.innerText = data.progress + '%';
+        }
+      }
+
+      function finish(type, message) {
+        Liferay.Util.openToast({
+          message: message,
+          type: type,
+          displayType: 'snackbar'
+        });
+        disableButtons(false);
+        setTimeout(() => window.location.replace(viewUrl), 1000);
+      }
+
+      function pollStatus() {
+        fetch(statusUrl)
+            .then((res) => res.json())
+            .then((data) => {
+              showProgress(data);
+
+              if (data.error) {
+                finish('danger', data.error);
+              } else if (data.complete) {
+                finish('success', successMessage);
+              } else {
+                setTimeout(pollStatus, 1000);
+              }
+            })
+            .catch((error) => finish('danger', String(error)));
+      }
+
+      disableButtons(true);
+      pollStatus();
+    })();
+  </aui:script>
+</c:if>

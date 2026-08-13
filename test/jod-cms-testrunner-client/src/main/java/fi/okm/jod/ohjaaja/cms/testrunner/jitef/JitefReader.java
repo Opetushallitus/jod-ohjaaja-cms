@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -17,12 +16,12 @@ import java.util.List;
  * Reader for JodCmsIntegrationTestExchangeFormat (JITEF) payloads.
  *
  * <p>JITEF is the internal wire format of the JOD CMS integration test runner. The syntax is
- * intentionally JSON-like for readability and NDJITEF streaming, but it is still a protocol
- * format, not a general JSON API contract.
+ * intentionally JSON-like for readability and NDJITEF streaming, but it is still a protocol format,
+ * not a general JSON API contract.
  *
- * <p>Public methods are protocol-specific accessors for the payloads produced by
- * {@link JitefWriter} and consumed by runtime components. Generic field readers remain private so
- * callers cannot parse arbitrary shapes through this class.
+ * <p>Public methods are protocol-specific accessors for the payloads produced by {@link
+ * JitefWriter} and consumed by runtime components. Generic field readers remain private so callers
+ * cannot parse arbitrary shapes through this class.
  *
  * <p>Required protocol fields are parsed strictly. Missing or malformed required fields cause an
  * {@link IllegalArgumentException}. Optional fields are handled by caller-specific logic.
@@ -187,7 +186,8 @@ public final class JitefReader {
    * {@code result}; non-string tokens are skipped over. Returns the next index to read from, or
    * {@code -1} when iteration should stop (end of array or malformed input).
    */
-  private static int readNextArrayElement(String payload, int from, int close, List<String> result) {
+  private static int readNextArrayElement(
+      String payload, int from, int close, List<String> result) {
     int i = skipWhitespaceAndCommas(payload, from, close);
     if (i >= close) {
       return -1;
@@ -233,8 +233,8 @@ public final class JitefReader {
   }
 
   /**
-   * Appends the escaped sequence whose escape character lives at {@code afterBackslash} to
-   * {@code sb}, and returns the index after the consumed sequence.
+   * Appends the escaped sequence whose escape character lives at {@code afterBackslash} to {@code
+   * sb}, and returns the index after the consumed sequence.
    */
   private static int appendEscapedChar(String payload, int afterBackslash, StringBuilder sb) {
     char next = payload.charAt(afterBackslash);
@@ -273,15 +273,16 @@ public final class JitefReader {
 
   private static int appendUnicodeEscape(String payload, int afterBackslash, StringBuilder sb) {
     if (afterBackslash + 4 < payload.length()) {
-      sb.append((char) Integer.parseInt(payload.substring(afterBackslash + 1, afterBackslash + 5), 16));
+      sb.append(
+          (char) Integer.parseInt(payload.substring(afterBackslash + 1, afterBackslash + 5), 16));
       return afterBackslash + 5;
     }
     return afterBackslash + 1;
   }
 
   /**
-   * Returns the index just past the closing quote of a string that starts at the given index,
-   * or {@code -1} if the string is unterminated.
+   * Returns the index just past the closing quote of a string that starts at the given index, or
+   * {@code -1} if the string is unterminated.
    */
   private static int endOfStringStartingAtQuote(String payload, int quoteIndex) {
     int i = quoteIndex + 1;
@@ -354,5 +355,3 @@ public final class JitefReader {
     return i;
   }
 }
-
-

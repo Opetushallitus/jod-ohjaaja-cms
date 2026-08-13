@@ -1,4 +1,38 @@
 // Check GETTING_STARTED.markdown for information regarding usage.
+
+plugins {
+  alias(libs.plugins.spotless) apply false
+}
+
+subprojects { subproject ->
+  subproject.pluginManager.withPlugin('java') {
+    subproject.apply plugin: 'com.diffplug.spotless'
+    subproject.apply from: rootProject.file('gradle/jod.spotless.gradle')
+  }
+}
+
+def liferayDockerImage = providers.gradleProperty("liferay.workspace.docker.image.liferay")
+    .orElse("liferay/dxp:2026.q1.9-lts")
+    .get()
+
+def liferayDxpTag = providers.gradleProperty("liferay.workspace.product")
+    .map { product -> product.replaceFirst(/^dxp-/, '') }
+    .orElse("2026.q1.9-lts")
+    .get()
+
+tasks.register('syncDockerEnv') {
+  group = 'build'
+  description = 'Write .env (LIFERAY_DXP_TAG) from liferay.workspace.product for docker-compose'
+
+  def envFile = rootProject.file('.env')
+  outputs.file envFile
+
+  doLast {
+    envFile.text = "LIFERAY_DXP_TAG=${liferayDxpTag}\n"
+    println "Wrote ${envFile} (LIFERAY_DXP_TAG=${liferayDxpTag})"
+  }
+}
+
 tasks.register('installGitHooks', Copy) {
   from("${rootProject.rootDir}/scripts/git-hooks") {
     include 'pre-*'
@@ -9,7 +43,7 @@ tasks.register('installGitHooks', Copy) {
 
 if (System.getenv("CI") == null) {
   buildDockerImage {
-    dependsOn 'installGitHooks'
+    dependsOn 'installGitHooks', 'syncDockerEnv'
   }
 }
 
@@ -25,7 +59,7 @@ tasks.register('copyTestDockerfile', Copy) {
 
 tasks.register('downloadPortalTestBundle', Copy) {
   from configurations.detachedConfiguration(
-    dependencies.create('com.liferay.portal:com.liferay.portal.test:28.0.0')
+    dependencies.create("com.liferay.portal:com.liferay.portal.test:${libs.versions.portal.test.asProvider().get()}")
   )
   into layout.buildDirectory.dir('docker/portal-test-libs')
   rename { 'com.liferay.portal.test.jar' }
@@ -45,7 +79,11 @@ tasks.register('copyTestRunnerOsgiToDocker', Copy) {
 
 tasks.register('dockerBuildTestImage', Exec) {
   dependsOn tasks.named('copyTestDockerfile'), tasks.named('copyTestRunnerOsgiToDocker'), tasks.named('downloadPortalTestBundle')
-  commandLine 'docker', 'build', '-t', 'liferay-test', '-f', "${layout.buildDirectory.get().asFile}/docker/Dockerfile.test", "${layout.buildDirectory.get().asFile}/docker"
+  commandLine 'docker', 'build',
+      '--build-arg', "LIFERAY_DOCKER_IMAGE=${liferayDockerImage}",
+      '-t', 'liferay-test',
+      '-f', "${layout.buildDirectory.get().asFile}/docker/Dockerfile.test",
+      "${layout.buildDirectory.get().asFile}/docker"
 }
 
 gradle.projectsEvaluated {

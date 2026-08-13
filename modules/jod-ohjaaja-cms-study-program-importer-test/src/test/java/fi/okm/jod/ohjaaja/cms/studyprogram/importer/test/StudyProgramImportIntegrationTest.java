@@ -9,14 +9,13 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
-import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.counter.kernel.service.CounterLocalServiceUtil;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTaskManagerUtil;
+import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
@@ -27,6 +26,13 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramBackgroundTaskService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Dictionary;
+import java.util.Hashtable;
+import java.util.List;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -42,20 +48,11 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Dictionary;
-import java.util.Hashtable;
-import java.util.List;
-
 @RunWith(JodInContainerRunner.class)
 public class StudyProgramImportIntegrationTest {
 
-  @ClassRule
-  @Rule
+  @ClassRule @Rule
   public static final AggregateTestRule aggregateTestRule = new LiferayIntegrationTestRule();
-
-  private static final long TEST_GROUP_ID = 20117L;
 
   private static BundleContext bundleContext;
   private static StudyProgramService studyProgramService;
@@ -64,6 +61,7 @@ public class StudyProgramImportIntegrationTest {
   private static KonfoClient konfoClient;
   private static PermissionChecker originalPermissionChecker;
   private static ServiceRegistration<KonfoClient> mockServiceRegistration;
+  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   private static final List<String> allCreatedArticleIds = new ArrayList<>();
 
@@ -78,8 +76,8 @@ public class StudyProgramImportIntegrationTest {
     MockKonfoClient mockKonfoClient = new MockKonfoClient();
     Dictionary<String, Object> props = new Hashtable<>();
     props.put("service.ranking", 1000);
-    mockServiceRegistration = bundleContext.registerService(
-        KonfoClient.class, mockKonfoClient, props);
+    mockServiceRegistration =
+        bundleContext.registerService(KonfoClient.class, mockKonfoClient, props);
 
     System.out.println("✅ MockKonfoClient registered as OSGi service with ranking 1000");
 
@@ -88,7 +86,7 @@ public class StudyProgramImportIntegrationTest {
         .atMost(Duration.ofSeconds(5))
         .pollInterval(Duration.ofMillis(100))
         .until(() -> getService(KonfoClient.class) instanceof MockKonfoClient);
-
+    jodOhjaajaCmsUtil = getService(JodOhjaajaCmsUtil.class);
     studyProgramService = getService(StudyProgramService.class);
     journalArticleLocalService = getService(JournalArticleLocalService.class);
     backgroundTaskService = getService(StudyProgramBackgroundTaskService.class);
@@ -114,8 +112,10 @@ public class StudyProgramImportIntegrationTest {
 
     // Note: Articles are NOT automatically deleted to allow inspection
     // They can be manually cleaned up or will be removed when container restarts
-    System.out.println("\n=== Test completed. " + allCreatedArticleIds.size() +
-        " articles remain for inspection ===");
+    System.out.println(
+        "\n=== Test completed. "
+            + allCreatedArticleIds.size()
+            + " articles remain for inspection ===");
   }
 
   @Before
@@ -134,8 +134,8 @@ public class StudyProgramImportIntegrationTest {
   }
 
   /**
-   * Helper method to start import and wait for completion.
-   * Each test should call this to ensure articles exist.
+   * Helper method to start import and wait for completion. Each test should call this to ensure
+   * articles exist.
    */
   private void runImportAndWait() throws Exception {
     // Check if import is already running - if so, wait for it
@@ -165,10 +165,11 @@ public class StudyProgramImportIntegrationTest {
       Awaitility.await()
           .atMost(Duration.ofSeconds(60))
           .pollInterval(Duration.ofSeconds(1))
-          .until(() -> {
-            BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(taskId);
-            return current != null && current.isCompleted();
-          });
+          .until(
+              () -> {
+                BackgroundTask current = BackgroundTaskManagerUtil.fetchBackgroundTask(taskId);
+                return current != null && current.isCompleted();
+              });
     } catch (Exception timeout) {
       Assert.fail("Import task did not complete within 60 seconds");
       return;
@@ -179,24 +180,21 @@ public class StudyProgramImportIntegrationTest {
   }
 
   /**
-   * Pauses the current thread for the given duration without using {@link Thread#sleep(long)},
-   * so callers can wait for asynchronous side effects (e.g. database transaction commits or
-   * background task cleanup) to become visible. Implemented via Awaitility's {@code pollDelay}
-   * to satisfy the "no Thread.sleep in tests" rule while still expressing an intentional pause.
+   * Pauses the current thread for the given duration without using {@link Thread#sleep(long)}, so
+   * callers can wait for asynchronous side effects (e.g. database transaction commits or background
+   * task cleanup) to become visible. Implemented via Awaitility's {@code pollDelay} to satisfy the
+   * "no Thread.sleep in tests" rule while still expressing an intentional pause.
    */
   private static void settle(Duration duration) {
-    Awaitility.await()
-        .pollDelay(duration)
-        .atMost(duration.plusSeconds(1))
-        .until(() -> true);
+    Awaitility.await().pollDelay(duration).atMost(duration.plusSeconds(1)).until(() -> true);
   }
 
   @Test
   public void shouldImportStudyProgramsUsingMockClient() throws Exception {
     System.out.println("\n=== Testing Import via startImportTask() with MockKonfoClient ===");
 
-    Assert.assertTrue("KonfoClient should be MockKonfoClient",
-        konfoClient instanceof MockKonfoClient);
+    Assert.assertTrue(
+        "KonfoClient should be MockKonfoClient", konfoClient instanceof MockKonfoClient);
 
     int initialCount = studyProgramService.getImportedStudyPrograms().size();
     System.out.println("Initial article count: " + initialCount);
@@ -209,12 +207,14 @@ public class StudyProgramImportIntegrationTest {
 
     for (int i = 1; i <= expectedCount; i++) {
       String oid = "1.2.246.562.20.0000000000" + i;
-      JournalArticle article = journalArticleLocalService
-          .fetchLatestArticleByExternalReferenceCode(TEST_GROUP_ID, oid);
+      JournalArticle article =
+          journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), oid);
 
       if (article != null) {
         createdArticleIds.add(oid);
-        System.out.println("✅ Article imported: " + article.getTitle("fi_FI") + " (OID: " + oid + ")");
+        System.out.println(
+            "✅ Article imported: " + article.getTitle("fi_FI") + " (OID: " + oid + ")");
 
         // Verify article content for first article
         if (i == 1) {
@@ -226,16 +226,19 @@ public class StudyProgramImportIntegrationTest {
           Assert.assertNotNull("Content should not be null", content);
           Assert.assertFalse("Content should not be empty", content.isEmpty());
 
-          System.out.println("   ✅ Article content verified - Title: " + fiTitle +
-              ", Content length: " + content.length() + " chars");
+          System.out.println(
+              "   ✅ Article content verified - Title: "
+                  + fiTitle
+                  + ", Content length: "
+                  + content.length()
+                  + " chars");
         }
       }
     }
 
     int finalCount = studyProgramService.getImportedStudyPrograms().size();
     System.out.println("\nFinal article count: " + finalCount);
-    Assert.assertTrue("Should have imported articles",
-        finalCount >= initialCount);
+    Assert.assertTrue("Should have imported articles", finalCount >= initialCount);
 
     System.out.println("\n✅ Import test completed successfully!");
   }
@@ -285,8 +288,7 @@ public class StudyProgramImportIntegrationTest {
     long fakeTaskId = createFakeRunningImportTask();
     try {
       Assert.assertTrue(
-          "Should detect running task",
-          backgroundTaskService.isAnyImportOrDeleteTaskRunning());
+          "Should detect running task", backgroundTaskService.isAnyImportOrDeleteTaskRunning());
       System.out.println("✅ Running task detected");
     } finally {
       deleteBackgroundTaskById(fakeTaskId);
@@ -300,10 +302,10 @@ public class StudyProgramImportIntegrationTest {
    * concurrent-task prevention logic can observe it as active.
    *
    * <p>We cannot start a task through {@link StudyProgramBackgroundTaskService#startImportTask}
-   * here because {@link LiferayIntegrationTestRule} registers a synchronous destination for
-   * {@code liferay/background_task}, which makes every dispatched task run to completion on the
-   * test thread before {@code startImportTask} returns. Bypassing the dispatcher and writing the
-   * row ourselves lets us simulate an in-progress task deterministically.
+   * here because {@link LiferayIntegrationTestRule} registers a synchronous destination for {@code
+   * liferay/background_task}, which makes every dispatched task run to completion on the test
+   * thread before {@code startImportTask} returns. Bypassing the dispatcher and writing the row
+   * ourselves lets us simulate an in-progress task deterministically.
    */
   private static long createFakeRunningImportTask() throws Exception {
     long taskId =
@@ -314,7 +316,7 @@ public class StudyProgramImportIntegrationTest {
     task.setUserId(user.getUserId());
     task.setUserName(user.getFullName());
     task.setCompanyId(user.getCompanyId());
-    task.setGroupId(TEST_GROUP_ID);
+    task.setGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     task.setName("study-program-import");
     task.setTaskExecutorClassName(
         "fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor");
@@ -338,16 +340,18 @@ public class StudyProgramImportIntegrationTest {
   }
 
   private static void deleteAllBackgroundTasks(String taskName) {
-    for (var task : BackgroundTaskLocalServiceUtil.getBackgroundTasks(TEST_GROUP_ID, taskName)) {
+    for (var task :
+        BackgroundTaskLocalServiceUtil.getBackgroundTasks(
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), taskName)) {
       deleteBackgroundTaskById(task.getBackgroundTaskId());
     }
   }
 
   /**
-   * Deletes a background task row, normalising its state first so that Liferay's lifecycle
-   * checks do not refuse the deletion. Tasks left in {@code IN_PROGRESS} status (as produced
-   * by {@link #createFakeRunningImportTask}) are first marked as completed; missing context
-   * maps - required by {@code BackgroundTaskModelListener.onBeforeRemove} - are filled in.
+   * Deletes a background task row, normalising its state first so that Liferay's lifecycle checks
+   * do not refuse the deletion. Tasks left in {@code IN_PROGRESS} status (as produced by {@link
+   * #createFakeRunningImportTask}) are first marked as completed; missing context maps - required
+   * by {@code BackgroundTaskModelListener.onBeforeRemove} - are filled in.
    */
   private static void deleteBackgroundTaskById(long taskId) {
     try {
@@ -359,7 +363,9 @@ public class StudyProgramImportIntegrationTest {
       if (task.getTaskContextMap() == null) {
         task.setTaskContextMap(new java.util.HashMap<>());
       }
-      task.setStatus(com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants.STATUS_SUCCESSFUL);
+      task.setStatus(
+          com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants
+              .STATUS_SUCCESSFUL);
       task.setCompleted(true);
       BackgroundTaskLocalServiceUtil.updateBackgroundTask(task);
       BackgroundTaskLocalServiceUtil.deleteBackgroundTask(task);

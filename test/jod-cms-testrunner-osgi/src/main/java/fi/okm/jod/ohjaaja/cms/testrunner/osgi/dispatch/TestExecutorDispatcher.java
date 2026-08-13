@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -19,10 +18,11 @@ import org.osgi.framework.Bundle;
 /**
  * Invokes the in-container test executor inside the test bundle's classloader via reflection.
  *
- * <p>The test bundle embeds {@code fi.okm.jod.ohjaaja.cms.testrunner.runtime.InContainerTestExecutor}
- * (and its private JUnit/Hamcrest copies). Running the executor inside the test bundle keeps every
- * class load - test class, annotations, JUnit runner - within a single classloader, avoiding the
- * classloader-mismatch issues that arise when JUnit is shared across multiple OSGi bundles.
+ * <p>The test bundle embeds {@code
+ * fi.okm.jod.ohjaaja.cms.testrunner.runtime.InContainerTestExecutor} (and its private
+ * JUnit/Hamcrest copies). Running the executor inside the test bundle keeps every class load - test
+ * class, annotations, JUnit runner - within a single classloader, avoiding the classloader-mismatch
+ * issues that arise when JUnit is shared across multiple OSGi bundles.
  */
 public final class TestExecutorDispatcher {
 

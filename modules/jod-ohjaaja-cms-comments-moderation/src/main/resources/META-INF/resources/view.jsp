@@ -7,7 +7,7 @@
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentDto" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.CommentReportSummaryDto" %>
 <%@ page import="fi.okm.jod.ohjaaja.cms.comments.moderation.dto.PageDto" %>
-<%@ page import="javax.portlet.PortletRequest" %>
+<%@ page import="jakarta.portlet.PortletRequest" %>
 <%@ page import="java.sql.Date" %>
 <%@ page import="java.text.DateFormat" %>
 <%@ page import="java.util.ArrayList" %>
@@ -31,7 +31,7 @@
 
   boolean commentsEnabled = Boolean.TRUE.equals(request.getAttribute("commentsEnabled"));
   String ohjaajaArticleShortUrlPrefix = (String) request.getAttribute("ohjaajaArticleShortUrlPrefix");
-  PortletRequest portletRequest = (PortletRequest) request.getAttribute("javax.portlet.request");
+  PortletRequest portletRequest = (PortletRequest) request.getAttribute("jakarta.portlet.request");
 
   Locale userLocale = themeDisplay.getLocale();
   DateFormat dateFormat = DateFormatFactoryUtil.getDateTime(userLocale, timeZone);
@@ -73,8 +73,7 @@
         value='<%= commentsEnabled ? themeDisplay.translate("button.disable.comments") : themeDisplay.translate("button.enable.comments") %>'
         data-url="${toggleCommentsFeatureFlagURL}"
         data-msg='<%= commentsEnabled ? themeDisplay.translate("confirm.disable.comments") : themeDisplay.translate("confirm.enable.comments")%>'
-        onClick="return handleConfirmationRequiringButtonClick(this);"
-        cssClass="btn btn-sm"/>
+        cssClass="btn btn-sm js-confirm-action"/>
   </p>
 
 
@@ -160,16 +159,14 @@
                 <aui:button
                     value='<%= themeDisplay.translate("button.delete.comment")%>'
                     data-url="${deleteCommentURL}"
-                    data-msg='<%= themeDisplay.translate("confirm.delete.comment\")%>'
-                    onClick="return handleConfirmationRequiringButtonClick(this);"
-                    cssClass="btn btn-danger btn-sm"/>
+                    data-msg='<%= themeDisplay.translate("confirm.delete.comment")%>'
+                    cssClass="btn btn-danger btn-sm js-confirm-action"/>
 
                 <aui:button
                     value='<%= themeDisplay.translate("button.delete.reports")%>'
                     data-url="${deleteReportURL}"
-                    data-msg='<%= themeDisplay.translate("confirm.delete.reports\")%>'
-                    onClick="return handleConfirmationRequiringButtonClick(this);"
-                    cssClass="btn btn-warning btn-sm"/>
+                    data-msg='<%= themeDisplay.translate("confirm.delete.reports")%>'
+                    cssClass="btn btn-warning btn-sm js-confirm-action"/>
 
                 <aui:button
                     value='<%= themeDisplay.translate("button.view.article")%>'
@@ -221,8 +218,7 @@
                     value='<%= themeDisplay.translate("button.delete.comment")%>'
                     data-url="${deleteCommentURL}"
                     data-msg='<%= themeDisplay.translate("confirm.delete.comment")%>'
-                    onClick="return handleConfirmationRequiringButtonClick(this);"
-                    cssClass="btn btn-danger btn-sm"/>
+                    cssClass="btn btn-danger btn-sm js-confirm-action"/>
                 <aui:button
                     value='<%= themeDisplay.translate("button.view.article")%>'
                     href="<%=ohjaajaArticleShortUrlPrefix+comment.artikkeliErc()%>"
@@ -239,7 +235,7 @@
         <c:if test="${commentsPage.maara() > 0}">
 
           <div class="pagination-bar">
-            <nav aria-label="Pagination">
+            <nav aria-label="pagination">
               <ul class="pagination pagination-root">
 
 
@@ -299,14 +295,23 @@
   </div>
 </div>
 
-<script>
-  function handleConfirmationRequiringButtonClick(button) {
-    const url = button.getAttribute('data-url');
-    const message = button.getAttribute('data-msg');
-    if (confirm(message)) {
-      window.location.href = url;
-    }
-    return false;
-  }
-</script>
+<aui:script>
+  (function () {
+    document.addEventListener('click', function (event) {
+      const button = event.target.closest('.js-confirm-action');
+      if (!button) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const url = button.getAttribute('data-url');
+      const message = button.getAttribute('data-msg');
+
+      if (url && confirm(message)) {
+        window.location.href = url;
+      }
+    });
+  })();
+</aui:script>
 

@@ -9,8 +9,8 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.dto;
 
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
-import javax.validation.constraints.NotNull;
 
 public record NavigationDto(
     @NotNull Long id, @NotNull Long siteId, @NotNull List<NavigationItemDto> navigationItems) {}

@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -29,8 +28,8 @@ public final class TestBundleStore {
   /**
    * Installs the given bundle bytes and starts the resulting bundle. If {@link Bundle#start()}
    * fails, the freshly installed bundle is rolled back via {@link Bundle#uninstall()} so a
-   * resolution or activation error does not leak a stale bundle into the framework that the
-   * client never receives an id for.
+   * resolution or activation error does not leak a stale bundle into the framework that the client
+   * never receives an id for.
    */
   public long install(byte[] bundleBytes) throws BundleException {
     String location = LOCATION_PREFIX + System.nanoTime();
@@ -57,7 +56,9 @@ public final class TestBundleStore {
     String location = bundle.getLocation();
     if (location == null || !location.startsWith(LOCATION_PREFIX)) {
       throw new BundleException(
-          "Refusing to uninstall bundle " + bundleId + " which was not installed by the test runner");
+          "Refusing to uninstall bundle "
+              + bundleId
+              + " which was not installed by the test runner");
     }
     bundle.uninstall();
   }
@@ -70,8 +71,7 @@ public final class TestBundleStore {
     }
     String location = bundle.getLocation();
     if (location == null || !location.startsWith(LOCATION_PREFIX)) {
-      throw new BundleException(
-          "Bundle " + bundleId + " was not installed by the test runner");
+      throw new BundleException("Bundle " + bundleId + " was not installed by the test runner");
     }
     return bundle;
   }

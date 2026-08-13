@@ -30,6 +30,7 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstan
 import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -49,6 +50,7 @@ public class StudyProgramCategoryService {
   @Reference private JournalArticleLocalService journalArticleLocalService;
   @Reference private Portal portal;
   @Reference private TagsService tagsService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   @Activate
   protected void activate() {
@@ -75,7 +77,8 @@ public class StudyProgramCategoryService {
 
   private JodTaxonomyCategoryDto getStudyProgramTagCategory() {
     var tagCategories =
-        tagsService.getJodTaxonomyCategories(StudyProgramImporterConstants.JOD_GROUP_ID);
+        tagsService.getJodTaxonomyCategories(
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
 
     return tagCategories.stream()
         .filter(
@@ -135,7 +138,7 @@ public class StudyProgramCategoryService {
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_ENGLISH_TITLE,
               LANGUAGE_ID_SV_SE,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_SWEDISH_TITLE),
-          StudyProgramImporterConstants.JOD_GROUP_ID);
+          jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     } else {
       tagsService.addOrUpdateJodTaxonomyCategory(
           null,
@@ -148,7 +151,7 @@ public class StudyProgramCategoryService {
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_ENGLISH_TITLE,
               LANGUAGE_ID_SV_SE,
               StudyProgramImporterConstants.STUDY_PROGRAM_TAG_CATEGORY_SWEDISH_TITLE),
-          StudyProgramImporterConstants.JOD_GROUP_ID);
+          jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     }
   }
 
@@ -248,7 +251,7 @@ public class StudyProgramCategoryService {
     return assetVocabularyLocalService.addVocabulary(
         StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE,
         user.getUserId(),
-        StudyProgramImporterConstants.JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         "category",
         null,
         LocalizedMapUtil.getLocalizedMap(
@@ -273,7 +276,7 @@ public class StudyProgramCategoryService {
     return assetCategoryLocalService.addCategory(
         StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE,
         user.getUserId(),
-        StudyProgramImporterConstants.JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         0,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(
@@ -298,7 +301,7 @@ public class StudyProgramCategoryService {
     return assetCategoryLocalService.addCategory(
         StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE,
         user.getUserId(),
-        StudyProgramImporterConstants.JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         parentCategoryId,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(

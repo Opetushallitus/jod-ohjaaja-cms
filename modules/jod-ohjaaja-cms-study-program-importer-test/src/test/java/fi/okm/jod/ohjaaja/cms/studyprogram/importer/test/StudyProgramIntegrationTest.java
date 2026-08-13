@@ -9,7 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
@@ -19,6 +18,7 @@ import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -31,14 +31,13 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
 /**
- * Tests for DDM Structure management.
- * Verifies that study program DDM structures are correctly created and configured.
+ * Tests for DDM Structure management. Verifies that study program DDM structures are correctly
+ * created and configured.
  */
 @RunWith(JodInContainerRunner.class)
 public class StudyProgramIntegrationTest {
 
-  @ClassRule
-  @Rule
+  @ClassRule @Rule
   public static final AggregateTestRule aggregateTestRule = new LiferayIntegrationTestRule();
 
   private static BundleContext bundleContext;
@@ -53,7 +52,7 @@ public class StudyProgramIntegrationTest {
     studyProgramStructureService = getService(StudyProgramStructureService.class);
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    
+
     var permissionCheckerFactory = getService(PermissionCheckerFactory.class);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
@@ -87,8 +86,10 @@ public class StudyProgramIntegrationTest {
     DDMStructure existingStructure = studyProgramStructureService.getOrCreateDDMStructure(false);
 
     Assert.assertNotNull("Existing structure should be found", existingStructure);
-    Assert.assertEquals("Structure IDs should match", 
-        createdStructure.getStructureId(), existingStructure.getStructureId());
+    Assert.assertEquals(
+        "Structure IDs should match",
+        createdStructure.getStructureId(),
+        existingStructure.getStructureId());
     System.out.println("✅ Existing DDM Structure retrieved");
   }
 
@@ -97,12 +98,15 @@ public class StudyProgramIntegrationTest {
     DDMStructure structure = studyProgramStructureService.getOrCreateDDMStructure(true);
     Assert.assertNotNull("Structure should not be null", structure);
 
-    long expectedClassNameId = com.liferay.portal.kernel.util.PortalUtil.getClassNameId(
-        com.liferay.journal.model.JournalArticle.class);
-    
-    Assert.assertEquals("Structure should have JournalArticle class name ID",
-        expectedClassNameId, structure.getClassNameId());
-    
+    long expectedClassNameId =
+        com.liferay.portal.kernel.util.PortalUtil.getClassNameId(
+            com.liferay.journal.model.JournalArticle.class);
+
+    Assert.assertEquals(
+        "Structure should have JournalArticle class name ID",
+        expectedClassNameId,
+        structure.getClassNameId());
+
     System.out.println("✅ DDM Structure ClassNameId: " + structure.getClassNameId());
   }
 
@@ -114,7 +118,7 @@ public class StudyProgramIntegrationTest {
     String definition = structure.getDefinition();
     Assert.assertNotNull("Structure definition should not be null", definition);
     Assert.assertFalse("Structure definition should not be empty", definition.isEmpty());
-    
+
     System.out.println("✅ DDM Structure definition length: " + definition.length());
   }
 }

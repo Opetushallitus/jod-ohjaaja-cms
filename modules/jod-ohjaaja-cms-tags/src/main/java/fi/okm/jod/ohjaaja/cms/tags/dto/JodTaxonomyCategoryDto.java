@@ -9,8 +9,8 @@
 
 package fi.okm.jod.ohjaaja.cms.tags.dto;
 
+import jakarta.validation.constraints.NotNull;
 import java.util.Map;
-import javax.validation.constraints.NotNull;
 
 public record JodTaxonomyCategoryDto(
     @NotNull Long id,

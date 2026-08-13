@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -27,8 +26,8 @@ import org.junit.Ignore;
 import org.junit.runner.RunWith;
 
 /**
- * Walks the compiled test classes directory and returns every class annotated with {@code
- * @RunWith(JodInContainerRunner.class)} (excluding {@code @Ignore}d ones).
+ * Walks the compiled test classes directory and returns every class annotated with
+ * {@code @RunWith(JodInContainerRunner.class)} (excluding {@code @Ignore}d ones).
  *
  * <p>This list is the working set used by {@link JodInContainerRunner} to decide when the last test
  * has finished and the test bundle can be uninstalled from the Liferay container.

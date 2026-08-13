@@ -1,28 +1,9 @@
-plugins {
-  id "com.diffplug.spotless" version "7.0.2"
-}
 repositories {
   mavenCentral()
 }
-dependencies {
-	compileOnly "com.liferay.portal:release.portal.api:7.4.3.132"
-  compileInclude "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.7"
-  compileOnly project(":modules:jod-ohjaaja-cms-study-program-importer")
-}
-spotless {
-  java {
-    target 'src/*/**/*.java'
-    googleJavaFormat()
-    licenseHeader '''\
-    /*
-     * Copyright (c) $YEAR The Finnish Ministry of Education and Culture, The Finnish
-     * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
-     * Education (Opetushallitus) and The Finnish Development and Administration centre
-     * for ELY Centres and TE Offices (KEHA).
-     *
-     * Licensed under the EUPL-1.2-or-later.
-     */
 
-     '''.stripIndent()
-  }
+dependencies {
+  compileOnly libs.liferay.dxp.api
+  compileInclude libs.jackson.datatype.jsr310
+  compileOnly project(":modules:jod-ohjaaja-cms-study-program-importer")
 }

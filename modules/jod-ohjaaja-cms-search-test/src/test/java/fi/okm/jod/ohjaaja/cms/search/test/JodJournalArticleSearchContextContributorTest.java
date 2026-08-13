@@ -9,7 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.search.test;
 
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.portal.kernel.search.Field;
 import com.liferay.portal.kernel.search.SearchContext;
 import com.liferay.portal.kernel.search.Sort;
@@ -21,6 +20,7 @@ import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.search.spi.model.query.contributor.SearchContextContributor;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.search.JodJournalArticleSearchContextContributor;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -35,11 +35,10 @@ import org.osgi.framework.ServiceReference;
 /**
  * Integration tests for JodJournalArticleSearchContextContributor.
  *
- * Verifies the OSGi service registration as well as the contribute() behavior
- * - score-based sorting replaces the default Vulcan ENTRY_CLASS_PK sort when keywords are present
- * - score is enabled on the QueryConfig when keywords are present
- * - searches without keywords are left untouched
- * - non-default sorts are preserved (scoring is still enabled)
+ * <p>Verifies the OSGi service registration as well as the contribute() behavior - score-based
+ * sorting replaces the default Vulcan ENTRY_CLASS_PK sort when keywords are present - score is
+ * enabled on the QueryConfig when keywords are present - searches without keywords are left
+ * untouched - non-default sorts are preserved (scoring is still enabled)
  */
 @RunWith(JodInContainerRunner.class)
 public class JodJournalArticleSearchContextContributorTest {
@@ -137,8 +136,7 @@ public class JodJournalArticleSearchContextContributorTest {
       }
     }
 
-    Assert.assertTrue(
-        "JodJournalArticleSearchContextContributor should be registered", found);
+    Assert.assertTrue("JodJournalArticleSearchContextContributor should be registered", found);
   }
 
   @Test
@@ -158,8 +156,7 @@ public class JodJournalArticleSearchContextContributorTest {
 
     var scoreSort = sorts[0];
     Assert.assertNull("Score sort field name should be null", scoreSort.getFieldName());
-    Assert.assertEquals(
-        "Score sort should be SCORE_TYPE", Sort.SCORE_TYPE, scoreSort.getType());
+    Assert.assertEquals("Score sort should be SCORE_TYPE", Sort.SCORE_TYPE, scoreSort.getType());
     Assert.assertFalse("Score sort should not be reversed", scoreSort.isReverse());
   }
 
@@ -178,9 +175,7 @@ public class JodJournalArticleSearchContextContributorTest {
     var sorts = searchContext.getSorts();
     Assert.assertEquals("Sorts should be left unchanged", 1, sorts.length);
     Assert.assertEquals(
-        "Original sort field should remain",
-        Field.ENTRY_CLASS_PK,
-        sorts[0].getFieldName());
+        "Original sort field should remain", Field.ENTRY_CLASS_PK, sorts[0].getFieldName());
     Assert.assertEquals("Original sort type should remain", Sort.LONG_TYPE, sorts[0].getType());
     Assert.assertFalse("Original sort direction should remain", sorts[0].isReverse());
   }
@@ -200,9 +195,7 @@ public class JodJournalArticleSearchContextContributorTest {
     var sorts = searchContext.getSorts();
     Assert.assertEquals("Custom sort should be preserved", 1, sorts.length);
     Assert.assertEquals(
-        "Custom sort field name should remain",
-        "modified_sortable",
-        sorts[0].getFieldName());
+        "Custom sort field name should remain", "modified_sortable", sorts[0].getFieldName());
     Assert.assertTrue("Custom sort reverse flag should remain", sorts[0].isReverse());
   }
 
@@ -219,8 +212,7 @@ public class JodJournalArticleSearchContextContributorTest {
     contributor.contribute(searchContext, null);
 
     Assert.assertTrue(
-        "Score should be enabled in query config",
-        searchContext.getQueryConfig().isScoreEnabled());
+        "Score should be enabled in query config", searchContext.getQueryConfig().isScoreEnabled());
 
     var sorts = searchContext.getSorts();
     Assert.assertEquals(

@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -27,8 +26,8 @@ import java.util.jar.Manifest;
 
 /**
  * Builds an OSGi bundle that contains the user's compiled test classes plus the in-container
- * runtime (JUnit, Hamcrest, {@code fi.okm.jod.ohjaaja.cms.testrunner.runtime.*}). The resulting bundle
- * is uploaded to the Liferay container via {@link HttpRunnerClient#installBundle(byte[])}.
+ * runtime (JUnit, Hamcrest, {@code fi.okm.jod.ohjaaja.cms.testrunner.runtime.*}). The resulting
+ * bundle is uploaded to the Liferay container via {@link HttpRunnerClient#installBundle(byte[])}.
  */
 public final class TestBundleBuilder {
 
@@ -130,8 +129,7 @@ public final class TestBundleBuilder {
     ProtectionDomain pd = testClass.getProtectionDomain();
     CodeSource codeSource = pd.getCodeSource();
     if (codeSource == null) {
-      throw new IllegalStateException(
-          "Cannot determine class location for " + testClass.getName());
+      throw new IllegalStateException("Cannot determine class location for " + testClass.getName());
     }
     URL location = codeSource.getLocation();
     try {
@@ -152,11 +150,11 @@ public final class TestBundleBuilder {
    * Import-Package} header.
    *
    * <p>bnd computes a version range for every imported package based on the version it sees on the
-   * build classpath. When the runtime Liferay container ships a different (typically newer)
-   * version of a package, the bundle fails to resolve with errors like {@code Unresolved
-   * requirement: Import-Package: com.liferay.foo.bar; version="[6.2.0,7.0.0)"}. We do not control
-   * what package versions the container ships, so the safest workaround is to drop the version
-   * ranges entirely and let OSGi resolve against whatever is exported at runtime.
+   * build classpath. When the runtime Liferay container ships a different (typically newer) version
+   * of a package, the bundle fails to resolve with errors like {@code Unresolved requirement:
+   * Import-Package: com.liferay.foo.bar; version="[6.2.0,7.0.0)"}. We do not control what package
+   * versions the container ships, so the safest workaround is to drop the version ranges entirely
+   * and let OSGi resolve against whatever is exported at runtime.
    */
   private static void stripImportVersions(Jar jar) throws Exception {
     Manifest manifest = jar.getManifest();
@@ -173,8 +171,8 @@ public final class TestBundleBuilder {
 
   /**
    * Removes {@code version="..."}, {@code bundle-version="..."} and {@code bundle-symbolic-name=}
-   * attributes from a comma-separated Import-Package clause list. Other directives (such as
-   * {@code resolution:=optional}) are preserved.
+   * attributes from a comma-separated Import-Package clause list. Other directives (such as {@code
+   * resolution:=optional}) are preserved.
    */
   static String removeVersionAttributes(String header) {
     StringBuilder result = new StringBuilder(header.length());

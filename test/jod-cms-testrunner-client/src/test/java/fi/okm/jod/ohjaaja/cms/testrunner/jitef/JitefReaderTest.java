@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -46,7 +45,8 @@ public class JitefReaderTest {
     assertEquals(42L, JitefReader.readInstallResponseBundleId("{\"bundleId\":42}"));
     assertEquals(7L, JitefReader.readInstallResponseBundleId("{\"bundleId\":+7}"));
     assertEquals(-3L, JitefReader.readInstallResponseBundleId("{\"bundleId\":-3}"));
-    assertThrows(IllegalArgumentException.class, () -> JitefReader.readInstallResponseBundleId("{}"));
+    assertThrows(
+        IllegalArgumentException.class, () -> JitefReader.readInstallResponseBundleId("{}"));
     assertThrows(
         IllegalArgumentException.class,
         () -> JitefReader.readInstallResponseBundleId("{\"bundleId\":12x}"));
@@ -96,15 +96,15 @@ public class JitefReaderTest {
   public void throwsWhenUnicodeEscapeIsMalformed() {
     String payload = "{\"bundleId\":1,\"className\":\"bad \\u00ZZ\",\"filteredMethods\":[\"m\"]}";
 
-    assertThrows(IllegalArgumentException.class, () -> JitefReader.readRunRequestClassName(payload));
+    assertThrows(
+        IllegalArgumentException.class, () -> JitefReader.readRunRequestClassName(payload));
   }
 
   @Test
   public void throwsWhenFilteredMethodsArrayIsUnterminated() {
     String payload = "{\"bundleId\":1,\"className\":\"A\",\"filteredMethods\":[\"m\"}";
 
-    assertThrows(IllegalArgumentException.class, () -> JitefReader.readRunRequestFilteredMethods(payload));
+    assertThrows(
+        IllegalArgumentException.class, () -> JitefReader.readRunRequestFilteredMethods(payload));
   }
 }
-
-
