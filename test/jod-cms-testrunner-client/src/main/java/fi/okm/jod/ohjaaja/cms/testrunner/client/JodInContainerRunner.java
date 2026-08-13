@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -44,8 +43,8 @@ import org.junit.runner.notification.RunNotifier;
  *   <li>The first invocation builds one OSGi bundle that embeds every {@code *Test} class in the
  *       current module plus the in-container runtime. JUnit and Hamcrest are deliberately
  *       <em>not</em> embedded - they are imported from the {@code com.liferay.portal.test} bundle
- *       so the same class instances back the test code, the JUnit framework, and Liferay's own
- *       test rules.
+ *       so the same class instances back the test code, the JUnit framework, and Liferay's own test
+ *       rules.
  *   <li>That bundle is POSTed to {@code /o/jod-testrunner/bundles} and started inside Liferay.
  *   <li>For each test class, {@code POST /o/jod-testrunner/run} streams the test events back as
  *       NDJITEF. Events are translated into {@link RunNotifier} calls so Gradle picks them up as
@@ -174,7 +173,9 @@ public class JodInContainerRunner extends Runner implements Filterable {
             new Failure(
                 getDescription(),
                 new RuntimeException(
-                    "Container reported run error: " + event.throwableClass() + ": "
+                    "Container reported run error: "
+                        + event.throwableClass()
+                        + ": "
                         + event.message())));
         break;
       default:
@@ -259,13 +260,16 @@ public class JodInContainerRunner extends Runner implements Filterable {
     }
     shutdownHookRegistered = true;
     Runtime.getRuntime()
-        .addShutdownHook(new Thread(() -> {
-          synchronized (stateLock) {
-            if (bundleId != -1L) {
-              uninstallBundleQuietly();
-            }
-          }
-        }, "jod-testrunner-shutdown"));
+        .addShutdownHook(
+            new Thread(
+                () -> {
+                  synchronized (stateLock) {
+                    if (bundleId != -1L) {
+                      uninstallBundleQuietly();
+                    }
+                  }
+                },
+                "jod-testrunner-shutdown"));
   }
 
   private static List<Method> scanTestMethods(Class<?> clazz) {
@@ -285,8 +289,7 @@ public class JodInContainerRunner extends Runner implements Filterable {
 
   /** Lightweight Throwable that renders the container-side stack trace verbatim. */
   private static final class ContainerSideFailure extends Throwable {
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
 
     ContainerSideFailure(String message) {
       super(message);

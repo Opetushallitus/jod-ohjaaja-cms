@@ -1,0 +1,54 @@
+// Shared dependencies and test config for modules/*-test projects.
+// Liferay product version comes from gradle.properties (liferay.workspace.product).
+
+def dxpApiVersion = providers.gradleProperty("liferay.workspace.product")
+    .map { product -> product.replaceFirst(/^dxp-/, '').replaceFirst(/-lts$/, '') }
+    .orElse("2026.q1.9")
+    .get()
+
+repositories {
+  mavenCentral()
+  maven {
+    url "https://repository-cdn.liferay.com/nexus/content/groups/public"
+  }
+}
+
+dependencies {
+  testImplementation project(':test:jod-cms-testrunner-client')
+
+  testImplementation libs.junit
+
+  testImplementation "com.liferay.portal:release.dxp.api:${dxpApiVersion}"
+  testImplementation libs.liferay.portal.test
+  testImplementation libs.liferay.portal.test.integration
+
+  testImplementation libs.slf4j.api
+  testImplementation libs.slf4j.simple
+  testImplementation libs.log4j.api
+  testImplementation libs.log4j.core
+
+  testImplementation libs.osgi.core
+}
+
+test {
+  useJUnit()
+
+  jvmArgs = [
+      '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+      '--add-opens=java.base/java.lang=ALL-UNNAMED',
+      '--add-opens=java.base/java.util=ALL-UNNAMED'
+  ]
+
+  testLogging {
+    events "passed", "skipped", "failed"
+    exceptionFormat "full"
+    showStandardStreams = true
+  }
+
+  systemProperty "jod.testrunner.url", System.getProperty("jod.testrunner.url", "http://localhost:8080")
+}
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_21
+  targetCompatibility = JavaVersion.VERSION_21
+}

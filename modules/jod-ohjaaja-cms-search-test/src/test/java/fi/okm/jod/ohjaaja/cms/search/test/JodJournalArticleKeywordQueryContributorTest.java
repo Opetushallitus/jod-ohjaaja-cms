@@ -9,7 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.search.test;
 
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.portal.kernel.search.BooleanClause;
 import com.liferay.portal.kernel.search.BooleanClauseOccur;
@@ -27,6 +26,7 @@ import com.liferay.portal.search.spi.model.query.contributor.KeywordQueryContrib
 import com.liferay.portal.search.spi.model.query.contributor.helper.KeywordQueryContributorHelper;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.search.JodJournalArticleKeywordQueryContributor;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -41,10 +41,9 @@ import org.osgi.framework.ServiceReference;
 /**
  * Integration tests for JodJournalArticleKeywordQueryContributor.
  *
- * Verifies the OSGi service registration as well as the contribute() behavior
- * - boosted title term queries are added for non-blank keywords
- * - keywords are taken from the SearchContext when none are passed in
- * - the contributor exits early when no keywords are available
+ * <p>Verifies the OSGi service registration as well as the contribute() behavior - boosted title
+ * term queries are added for non-blank keywords - keywords are taken from the SearchContext when
+ * none are passed in - the contributor exits early when no keywords are available
  */
 @RunWith(JodInContainerRunner.class)
 public class JodJournalArticleKeywordQueryContributorTest {
@@ -139,9 +138,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
 
           var ranking = ref.getProperty("service.ranking");
           Assert.assertEquals(
-              "Service ranking should be 100 to override default contributors",
-              100,
-              ranking);
+              "Service ranking should be 100 to override default contributors", 100, ranking);
           break;
         }
       } finally {
@@ -149,8 +146,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
       }
     }
 
-    Assert.assertTrue(
-        "JodJournalArticleKeywordQueryContributor should be registered", found);
+    Assert.assertTrue("JodJournalArticleKeywordQueryContributor should be registered", found);
   }
 
   @Test
@@ -200,8 +196,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
 
     Assert.assertTrue(
         "All term queries should have the title boost factor " + TITLE_BOOST, allBoosted);
-    Assert.assertTrue(
-        "All term queries should be on a localized title field", allTitleFields);
+    Assert.assertTrue("All term queries should be on a localized title field", allTitleFields);
   }
 
   @Test

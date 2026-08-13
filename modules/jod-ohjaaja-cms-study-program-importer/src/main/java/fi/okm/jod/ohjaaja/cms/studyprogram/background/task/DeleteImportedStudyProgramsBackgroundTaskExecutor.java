@@ -9,8 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.background.task;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
-
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.backgroundtask.*;
 import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
@@ -21,6 +19,7 @@ import com.liferay.portal.kernel.log.LogFactoryUtil;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -40,6 +39,7 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
   @Reference private StudyProgramStructureService studyProgramStructureService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
   @Reference private NavigationService navigationService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   public DeleteImportedStudyProgramsBackgroundTaskExecutor() {
     setIsolationLevel(BackgroundTaskConstants.ISOLATION_LEVEL_COMPANY);
@@ -54,7 +54,7 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
     status.setAttribute("phase", "studyprogram.deleting");
     status.setAttribute(STATUS_ATTRIBUTE_PROGRESS, 0);
 
-    var serviceContext = getServiceContext();
+    var serviceContext = getServiceContext(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
 
     var structure = studyProgramStructureService.getOrCreateDDMStructure(false);
     if (structure == null) {
@@ -65,7 +65,11 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
 
     var articles =
         journalArticleLocalService.getArticlesByStructureId(
-            JOD_GROUP_ID, structure.getStructureId(), QueryUtil.ALL_POS, QueryUtil.ALL_POS, null);
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+            structure.getStructureId(),
+            QueryUtil.ALL_POS,
+            QueryUtil.ALL_POS,
+            null);
 
     var total = articles.size() + 2;
 
@@ -74,7 +78,9 @@ public class DeleteImportedStudyProgramsBackgroundTaskExecutor
       try {
         navigationService.deleteStudyProgramNavigationMenuItem(article.getExternalReferenceCode());
         journalArticleLocalService.deleteArticle(
-            JOD_GROUP_ID, article.getArticleId(), serviceContext);
+            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+            article.getArticleId(),
+            serviceContext);
         log.info("Deleted study program: " + article.getExternalReferenceCode());
       } catch (PortalException e) {
         log.error("Failed to delete study program: " + article.getExternalReferenceCode(), e);

@@ -10,7 +10,6 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.EXTERNAL_REFERENCE_CODE;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
 
 import com.liferay.data.engine.service.DEDataDefinitionFieldLinkLocalService;
@@ -30,6 +29,7 @@ import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.Validator;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.exception.StudyProgramDDMStructureDeleteException;
 import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.*;
 import java.util.stream.Stream;
 import org.osgi.service.component.annotations.Component;
@@ -59,6 +59,7 @@ public class StudyProgramStructureService {
   @Reference private DDMStructureLocalService ddmStructureLocalService;
   @Reference private DDMStructureLayoutLocalService ddmStructureLayoutLocalService;
   @Reference private DEDataDefinitionFieldLinkLocalService deDataDefinitionFieldLinkLocalService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   public DDMStructure getOrCreateDDMStructure(boolean createIfNotExists) {
     try {
@@ -66,7 +67,9 @@ public class StudyProgramStructureService {
 
       var structure =
           ddmStructureLocalService.fetchStructureByExternalReferenceCode(
-              EXTERNAL_REFERENCE_CODE, JOD_GROUP_ID, classNameId);
+              EXTERNAL_REFERENCE_CODE,
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+              classNameId);
 
       if (structure == null && createIfNotExists) {
         structure = createDDMStructure();
@@ -111,7 +114,8 @@ public class StudyProgramStructureService {
       log.info("Deleted DDM structure: " + EXTERNAL_REFERENCE_CODE);
 
       DDMStructure fieldSet =
-          ddmStructureLocalService.fetchStructure(JOD_GROUP_ID, jaClassNameId, FIELDSET_KEY);
+          ddmStructureLocalService.fetchStructure(
+              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), jaClassNameId, FIELDSET_KEY);
 
       if (fieldSet != null) {
         deDataDefinitionFieldLinkLocalService.deleteDEDataDefinitionFieldLinks(
@@ -228,7 +232,7 @@ public class StudyProgramStructureService {
     var mainStructure = addMainStructure(user.getUserId(), fi, sv, en, linkFieldSet);
 
     deDataDefinitionFieldLinkLocalService.addDEDataDefinitionFieldLink(
-        JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         PortalUtil.getClassNameId(JournalArticle.class.getName()),
         mainStructure.getStructureId(),
         linkFieldSet.getStructureId(),
@@ -282,7 +286,7 @@ public class StudyProgramStructureService {
     return ddmStructureLocalService.addStructure(
         FIELDSET_KEY,
         userId,
-        JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         0,
         classNameId,
         FIELDSET_KEY,
@@ -381,7 +385,7 @@ public class StudyProgramStructureService {
     return ddmStructureLocalService.addStructure(
         EXTERNAL_REFERENCE_CODE,
         userId,
-        JOD_GROUP_ID,
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
         0,
         classNameId,
         EXTERNAL_REFERENCE_CODE,
@@ -436,9 +440,9 @@ public class StudyProgramStructureService {
     return layout;
   }
 
-  private static ServiceContext serviceContext(long userId) {
+  private ServiceContext serviceContext(long userId) {
     var sc = new ServiceContext();
-    sc.setScopeGroupId(JOD_GROUP_ID);
+    sc.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     sc.setAddGroupPermissions(true);
     sc.setAddGuestPermissions(true);
     sc.setUserId(userId);

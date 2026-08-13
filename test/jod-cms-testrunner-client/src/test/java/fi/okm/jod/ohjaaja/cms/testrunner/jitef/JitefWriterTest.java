@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -30,7 +29,12 @@ public class JitefWriterTest {
   public void writesFailureEventPayloadAndEscapesStrings() {
     String payload =
         JitefWriter.testFailureEvent(
-            "failure", "fi.okm.ExampleTest", "testX", "java.lang.RuntimeException", "a\"b\\c\n", "stack");
+            "failure",
+            "fi.okm.ExampleTest",
+            "testX",
+            "java.lang.RuntimeException",
+            "a\"b\\c\n",
+            "stack");
 
     assertEquals(
         "{\"type\":\"failure\",\"class\":\"fi.okm.ExampleTest\",\"method\":\"testX\",\"throwableClass\":\"java.lang.RuntimeException\",\"message\":\"a\\\"b\\\\c\\n\",\"stack\":\"stack\"}",
@@ -48,14 +52,16 @@ public class JitefWriterTest {
   public void writesEmptyArrayForNullFilteredMethods() {
     String payload = JitefWriter.runRequest(12L, "fi.okm.ExampleTest", null);
 
-    assertEquals("{\"bundleId\":12,\"className\":\"fi.okm.ExampleTest\",\"filteredMethods\":[]}", payload);
+    assertEquals(
+        "{\"bundleId\":12,\"className\":\"fi.okm.ExampleTest\",\"filteredMethods\":[]}", payload);
   }
 
   @Test
   public void writesSimpleTestEventPayload() {
     String payload = JitefWriter.testEvent("started", "fi.okm.ExampleTest", "testX");
 
-    assertEquals("{\"type\":\"started\",\"class\":\"fi.okm.ExampleTest\",\"method\":\"testX\"}", payload);
+    assertEquals(
+        "{\"type\":\"started\",\"class\":\"fi.okm.ExampleTest\",\"method\":\"testX\"}", payload);
   }
 
   @Test
@@ -100,4 +106,3 @@ public class JitefWriterTest {
         JitefReader.readRunRequestFilteredMethods(payload));
   }
 }
-

@@ -21,7 +21,7 @@ import org.osgi.service.component.annotations.Reference;
 @Component(
     property = {
       "panel.category.key=" + PanelCategoryKeys.SITE_ADMINISTRATION,
-      "panel.category.order:Integer=650"
+      "panel.category.order:Integer=1650"
     },
     service = PanelCategory.class)
 public class OhjaajaPanelCategory extends BasePanelCategory {

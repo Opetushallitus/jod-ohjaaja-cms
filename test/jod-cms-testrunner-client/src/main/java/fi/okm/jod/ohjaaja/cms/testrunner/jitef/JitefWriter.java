@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -14,8 +13,8 @@ package fi.okm.jod.ohjaaja.cms.testrunner.jitef;
  * Writer for JodCmsIntegrationTestExchangeFormat (JITEF) payloads.
  *
  * <p>JITEF is the internal exchange format of the JOD CMS integration test runner. Its syntax is
- * JSON-like for readability, but it is intentionally a narrow protocol format rather than a
- * general JSON API contract. NDJITEF streams are emitted as one JITEF object per line.
+ * JSON-like for readability, but it is intentionally a narrow protocol format rather than a general
+ * JSON API contract. NDJITEF streams are emitted as one JITEF object per line.
  *
  * <p>Public methods map directly to supported protocol payload shapes (run request and test
  * events). The generic object/field builders are private on purpose, so callers cannot construct
@@ -45,7 +44,8 @@ public final class JitefWriter {
   private JitefWriter() {}
 
   /** Serializes the protocol payload used by {@code POST /run}. */
-  public static String runRequest(long bundleId, String className, Iterable<String> filteredMethods) {
+  public static String runRequest(
+      long bundleId, String className, Iterable<String> filteredMethods) {
     return new JitefWriter()
         .beginObject()
         .field(FIELD_BUNDLE_ID, bundleId)
@@ -66,10 +66,10 @@ public final class JitefWriter {
   }
 
   /**
-   * Serializes a run-level error event emitted to the NDJITEF stream. {@code message} and
-   * {@code throwableClass} are required protocol fields; null inputs are normalised to empty
-   * strings so the host's strict reader does not reject the stream when an exception's
-   * {@link Throwable#getMessage()} happens to be null.
+   * Serializes a run-level error event emitted to the NDJITEF stream. {@code message} and {@code
+   * throwableClass} are required protocol fields; null inputs are normalised to empty strings so
+   * the host's strict reader does not reject the stream when an exception's {@link
+   * Throwable#getMessage()} happens to be null.
    */
   public static String runErrorEvent(String message, String throwableClass) {
     return new JitefWriter()
@@ -103,9 +103,9 @@ public final class JitefWriter {
   }
 
   /**
-   * Serializes a protocol event that carries failure details. All string fields are required by
-   * the host reader, so null inputs are normalised to empty strings to keep the stream parseable
-   * even for class-level failures (where method/class can legitimately be null).
+   * Serializes a protocol event that carries failure details. All string fields are required by the
+   * host reader, so null inputs are normalised to empty strings to keep the stream parseable even
+   * for class-level failures (where method/class can legitimately be null).
    */
   public static String testFailureEvent(
       String type,
@@ -236,4 +236,3 @@ public final class JitefWriter {
     return buffer.toString();
   }
 }
-

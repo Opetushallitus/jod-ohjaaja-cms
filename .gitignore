@@ -26,3 +26,6 @@
 /plugins-sdk/lib
 test-results
 /local/
+**/activation-key*.xml
+**/trial-dxp-license*.xml
+/backups/

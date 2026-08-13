@@ -60,21 +60,25 @@ public class MyServiceTest {
 }
 ```
 
-In the module's `build.gradle`:
+In the module's `build.gradle`, apply the shared convention and add module-specific deps:
 
 ```gradle
-dependencies {
-  testImplementation project(':test:jod-cms-testrunner-client')
-  testImplementation "junit:junit:4.13.2"
-  testImplementation "com.liferay.portal:com.liferay.portal.test:28.0.0"
-  // ...
+plugins {
+  id 'java'
 }
 
-test {
-  useJUnit()
-  systemProperty "jod.testrunner.url", System.getProperty("jod.testrunner.url", "http://localhost:8080")
+apply from: rootProject.file('gradle/jod.integration-test.gradle')
+
+dependencies {
+  testImplementation project(':modules:jod-ohjaaja-cms-example')
+  // optional extras, e.g. libs.awaitility — versions live in gradle/libs.versions.toml
 }
 ```
+
+Shared JUnit / Liferay test / logging / OSGi deps and the `test {}` block (including
+`jod.testrunner.url`) come from [`gradle/jod.integration-test.gradle`](../gradle/jod.integration-test.gradle).
+Versions are centralized in [`gradle/libs.versions.toml`](../gradle/libs.versions.toml);
+the DXP API version is derived from `liferay.workspace.product` in `gradle.properties`.
 
 The default Liferay base URL is `http://localhost:8080`. Override with
 `-Djod.testrunner.url=...` on the Gradle command line if needed.

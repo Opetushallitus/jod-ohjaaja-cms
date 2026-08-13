@@ -1,30 +1,29 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
 
 package fi.okm.jod.ohjaaja.cms.testrunner.runtime;
 
+import fi.okm.jod.ohjaaja.cms.testrunner.jitef.JitefWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-
-import fi.okm.jod.ohjaaja.cms.testrunner.jitef.JitefWriter;
 import org.junit.runner.Description;
 import org.junit.runner.notification.Failure;
 import org.junit.runner.notification.RunListener;
 
 /**
- * JUnit {@link RunListener} that serialises test events into newline-delimited JITEF (NDJITEF) and writes them
- * to an {@link OutputStream}, flushing after every line so the host receives events as they happen.
+ * JUnit {@link RunListener} that serialises test events into newline-delimited JITEF (NDJITEF) and
+ * writes them to an {@link OutputStream}, flushing after every line so the host receives events as
+ * they happen.
  *
  * <p>Event shapes (one JITEF object per line):
  *
@@ -117,4 +116,3 @@ public final class NdJitefRunListener extends RunListener {
     out.flush();
   }
 }
-

@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -17,7 +16,6 @@ import static org.junit.Assert.assertThrows;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -25,7 +23,8 @@ public class TestEventReaderTest {
 
   @Test
   public void parsesStartedEventWithRequiredFields() {
-    TestEvent event = TestEventReader.parse("{\"type\":\"started\",\"class\":\"A\",\"method\":\"m\"}");
+    TestEvent event =
+        TestEventReader.parse("{\"type\":\"started\",\"class\":\"A\",\"method\":\"m\"}");
 
     assertEquals(TestEvent.Type.STARTED, event.type());
     assertEquals("A", event.className());
@@ -61,7 +60,8 @@ public class TestEventReaderTest {
             "{\"type\":\"assumptionFailure\",\"class\":\"A\",\"method\":\"m\",\"throwableClass\":\"E\",\"message\":\"msg\",\"stack\":\"st\"}");
     assertEquals(TestEvent.Type.ASSUMPTION_FAILURE, assumption.type());
 
-    TestEvent ignored = TestEventReader.parse("{\"type\":\"ignored\",\"class\":\"A\",\"method\":\"m\"}");
+    TestEvent ignored =
+        TestEventReader.parse("{\"type\":\"ignored\",\"class\":\"A\",\"method\":\"m\"}");
     assertEquals(TestEvent.Type.IGNORED, ignored.type());
   }
 
@@ -88,7 +88,9 @@ public class TestEventReaderTest {
 
   @Test
   public void nextSkipsBlankLinesAndReturnsNullAtEof() throws Exception {
-    byte[] payload = "\n \n{\"type\":\"started\",\"class\":\"A\",\"method\":\"m\"}\n".getBytes(StandardCharsets.UTF_8);
+    byte[] payload =
+        "\n \n{\"type\":\"started\",\"class\":\"A\",\"method\":\"m\"}\n"
+            .getBytes(StandardCharsets.UTF_8);
     try (TestEventReader reader = new TestEventReader(new ByteArrayInputStream(payload))) {
       TestEvent event = reader.next();
       Assert.assertNotNull(event);
@@ -97,4 +99,3 @@ public class TestEventReaderTest {
     }
   }
 }
-

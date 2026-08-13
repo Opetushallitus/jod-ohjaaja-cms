@@ -9,7 +9,6 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.test;
 
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
@@ -25,6 +24,8 @@ import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
+import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -36,18 +37,13 @@ import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
-/**
- * Integration tests for NavigationService.
- * Tests navigation menu management functionality.
- */
+/** Integration tests for NavigationService. Tests navigation menu management functionality. */
 @RunWith(JodInContainerRunner.class)
 public class NavigationServiceTest {
 
   @ClassRule @Rule
-  public static final LiferayIntegrationTestRule liferayIntegrationTestRule = 
+  public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
-
-  private static final long TEST_GROUP_ID = 20117L;
 
   private static NavigationService navigationService;
   private static BundleContext bundleContext;
@@ -56,6 +52,8 @@ public class NavigationServiceTest {
   private static SiteNavigationMenu testNavigationMenu;
   private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
   private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  private static Long TEST_GROUP_ID;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
@@ -65,10 +63,12 @@ public class NavigationServiceTest {
     if (serviceReference != null) {
       navigationService = bundleContext.getService(serviceReference);
     }
-
+    jodOhjaajaCmsUtil =
+        bundleContext.getService(bundleContext.getServiceReference(JodOhjaajaCmsUtil.class));
+    TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     // Set up permissions
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    var permissionCheckerFactoryRef = 
+    var permissionCheckerFactoryRef =
         bundleContext.getServiceReference(PermissionCheckerFactory.class);
     var permissionCheckerFactory = bundleContext.getService(permissionCheckerFactoryRef);
     User adminUser = TestPropsValues.getUser();
@@ -77,11 +77,11 @@ public class NavigationServiceTest {
     bundleContext.ungetService(permissionCheckerFactoryRef);
 
     // Get services
-    var menuLocalServiceRef = 
+    var menuLocalServiceRef =
         bundleContext.getServiceReference(SiteNavigationMenuLocalService.class);
     siteNavigationMenuLocalService = bundleContext.getService(menuLocalServiceRef);
 
-    var menuItemLocalServiceRef = 
+    var menuItemLocalServiceRef =
         bundleContext.getServiceReference(SiteNavigationMenuItemLocalService.class);
     siteNavigationMenuItemLocalService = bundleContext.getService(menuItemLocalServiceRef);
 
@@ -110,36 +110,37 @@ public class NavigationServiceTest {
   }
 
   private static void setupTestNavigationMenu() throws Exception {
-    ServiceContext serviceContext = ServiceContextTestUtil.getServiceContext(
-        TEST_GROUP_ID, TestPropsValues.getUserId());
+    ServiceContext serviceContext =
+        ServiceContextTestUtil.getServiceContext(TEST_GROUP_ID, TestPropsValues.getUserId());
 
-    testNavigationMenu = siteNavigationMenuLocalService.addSiteNavigationMenu(
-        "test-nav-menu-" + System.currentTimeMillis(),
-        TestPropsValues.getUserId(),
-        TEST_GROUP_ID,
-        "Test Navigation Menu",
-        serviceContext
-    );
+    testNavigationMenu =
+        siteNavigationMenuLocalService.addSiteNavigationMenu(
+            "test-nav-menu-" + System.currentTimeMillis(),
+            TestPropsValues.getUserId(),
+            TEST_GROUP_ID,
+            "Test Navigation Menu",
+            serviceContext);
 
-    System.out.println("✅ Created test navigation menu: " + 
-        testNavigationMenu.getSiteNavigationMenuId());
+    System.out.println(
+        "✅ Created test navigation menu: " + testNavigationMenu.getSiteNavigationMenuId());
 
     // Create parent menu item with StudyProgramsListing custom field
-    var menuItem = siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
-        "test-menu-item-" + System.currentTimeMillis(),
-        TestPropsValues.getUserId(),
-        TEST_GROUP_ID,
-        testNavigationMenu.getSiteNavigationMenuId(),
-        0,
-        "url",
-        "{}",
-        serviceContext
-    );
+    var menuItem =
+        siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
+            "test-menu-item-" + System.currentTimeMillis(),
+            TestPropsValues.getUserId(),
+            TEST_GROUP_ID,
+            testNavigationMenu.getSiteNavigationMenuId(),
+            0,
+            "url",
+            "{}",
+            serviceContext);
 
     // Set custom field for StudyProgramsListing
     try {
-      var expandoValueLocalServiceRef = bundleContext.getServiceReference(
-          com.liferay.expando.kernel.service.ExpandoValueLocalService.class);
+      var expandoValueLocalServiceRef =
+          bundleContext.getServiceReference(
+              com.liferay.expando.kernel.service.ExpandoValueLocalService.class);
       var expandoValueLocalService = bundleContext.getService(expandoValueLocalServiceRef);
 
       expandoValueLocalService.addValue(
@@ -148,8 +149,7 @@ public class NavigationServiceTest {
           "CUSTOM_FIELDS",
           "jodNavigationCustomField",
           menuItem.getSiteNavigationMenuItemId(),
-          new String[]{"StudyProgramsListing"}
-      );
+          new String[] {"StudyProgramsListing"});
 
       bundleContext.ungetService(expandoValueLocalServiceRef);
       System.out.println("✅ Created parent menu item with StudyProgramsListing");
@@ -178,11 +178,12 @@ public class NavigationServiceTest {
       SiteNavigationMenuItem parentMenuItem = navigationService.getStudyProgramsParentMenuItem();
 
       Assert.assertNotNull("Parent menu item should not be null", parentMenuItem);
-      Assert.assertTrue("Parent menu item ID should be positive", 
+      Assert.assertTrue(
+          "Parent menu item ID should be positive",
           parentMenuItem.getSiteNavigationMenuItemId() > 0);
-      
-      System.out.println("✅ Parent menu item found: ID=" + 
-          parentMenuItem.getSiteNavigationMenuItemId());
+
+      System.out.println(
+          "✅ Parent menu item found: ID=" + parentMenuItem.getSiteNavigationMenuItemId());
     } catch (StudyProgramListingMissingException e) {
       System.out.println("⚠️  Expected in test environment without custom field setup");
     } catch (Exception e) {
@@ -199,10 +200,10 @@ public class NavigationServiceTest {
 
     Assert.assertNotNull("English navigation should not be null", navigationEN);
     Assert.assertNotNull("Finnish navigation should not be null", navigationFI);
-    Assert.assertNotNull("English navigation items should not be null", 
-        navigationEN.navigationItems());
-    Assert.assertNotNull("Finnish navigation items should not be null", 
-        navigationFI.navigationItems());
+    Assert.assertNotNull(
+        "English navigation items should not be null", navigationEN.navigationItems());
+    Assert.assertNotNull(
+        "Finnish navigation items should not be null", navigationFI.navigationItems());
 
     System.out.println("✅ EN navigation: " + navigationEN.navigationItems().size() + " items");
     System.out.println("✅ FI navigation: " + navigationFI.navigationItems().size() + " items");

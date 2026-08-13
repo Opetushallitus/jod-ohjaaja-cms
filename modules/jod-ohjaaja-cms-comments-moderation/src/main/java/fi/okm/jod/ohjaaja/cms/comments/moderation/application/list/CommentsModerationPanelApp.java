@@ -25,7 +25,7 @@ import org.osgi.service.component.annotations.Reference;
     service = PanelApp.class)
 public class CommentsModerationPanelApp extends BasePanelApp {
   @Reference(
-      target = "(javax.portlet.name=" + CommentsModerationPortletKeys.COMMENTS_MODERATION + ")")
+      target = "(jakarta.portlet.name=" + CommentsModerationPortletKeys.COMMENTS_MODERATION + ")")
   private Portlet portlet;
 
   @Override

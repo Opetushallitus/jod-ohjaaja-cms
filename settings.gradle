@@ -8,14 +8,26 @@ include ':modules:jod-ohjaaja-cms-navigation-test'
 include ':modules:jod-ohjaaja-cms-study-program-importer-test'
 include ':modules:jod-ohjaaja-cms-search-test'
 
-
-
+// Version catalog (libs) is not visible inside buildscript {}; read plugin versions from
+// gradle/libs.versions.toml so settings.gradle stays aligned with the catalog SoT.
 buildscript {
+	def catalogVersions = [:]
+	settingsDir.toPath().resolve('gradle/libs.versions.toml').toFile().eachLine { line ->
+		def matcher = line =~ /^\s*([A-Za-z0-9-]+)\s*=\s*"([^"]+)"\s*$/
+		if (matcher.matches()) {
+			catalogVersions[matcher[0][1]] = matcher[0][2]
+		}
+	}
+
+	def workspacePluginVersion = catalogVersions['liferay-workspace-plugin']
+	def testIntegrationPluginVersion = catalogVersions['liferay-test-integration-plugin']
+	def gradlePluginsVersion = catalogVersions['liferay-gradle-plugins']
+
 	dependencies {
-		classpath "com.liferay:com.liferay.gradle.plugins.workspace:13.1.2"
-    classpath "com.liferay:com.liferay.gradle.plugins.test.integration:4.0.0"
-    classpath "com.liferay:com.liferay.gradle.plugins:16.1.26"
-  }
+		classpath "com.liferay:com.liferay.gradle.plugins.workspace:${workspacePluginVersion}"
+		classpath "com.liferay:com.liferay.gradle.plugins.test.integration:${testIntegrationPluginVersion}"
+		classpath "com.liferay:com.liferay.gradle.plugins:${gradlePluginsVersion}"
+	}
 
 	repositories {
 		mavenLocal()
@@ -26,4 +38,3 @@ buildscript {
 }
 
 apply plugin: "com.liferay.workspace"
-

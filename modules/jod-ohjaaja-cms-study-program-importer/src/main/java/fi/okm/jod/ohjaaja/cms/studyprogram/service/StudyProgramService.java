@@ -9,13 +9,12 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.JOD_GROUP_ID;
-
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.dao.orm.QueryUtil;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.*;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -30,6 +29,7 @@ public class StudyProgramService {
 
   @Reference private JournalArticleLocalService journalArticleLocalService;
   @Reference private StudyProgramStructureService studyProgramStructureService;
+  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   public List<JournalArticle> getImportedStudyPrograms() {
 
@@ -40,6 +40,10 @@ public class StudyProgramService {
     }
 
     return journalArticleLocalService.getArticlesByStructureId(
-        JOD_GROUP_ID, structure.getStructureId(), QueryUtil.ALL_POS, QueryUtil.ALL_POS, null);
+        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+        structure.getStructureId(),
+        QueryUtil.ALL_POS,
+        QueryUtil.ALL_POS,
+        null);
   }
 }

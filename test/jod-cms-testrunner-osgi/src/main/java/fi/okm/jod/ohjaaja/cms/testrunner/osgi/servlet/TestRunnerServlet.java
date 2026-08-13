@@ -1,9 +1,8 @@
 /*
- * Copyright (c) 2026 The Finnish Ministry of Education and Culture,
- * The Finnish Ministry of Economic Affairs and Employment,
- * The Finnish National Agency of Education (Opetushallitus) and
- * The Finnish Development and Administration centre for ELY Centres
- * and TE Offices (KEHA).
+ * Copyright (c) 2026 The Finnish Ministry of Education and Culture, The Finnish
+ * The Ministry of Economic Affairs and Employment, The Finnish National Agency of
+ * Education (Opetushallitus) and The Finnish Development and Administration centre
+ * for ELY Centres and TE Offices (KEHA).
  *
  * Licensed under the EUPL-1.2-or-later.
  */
@@ -16,6 +15,10 @@ import fi.okm.jod.ohjaaja.cms.testrunner.jitef.JitefReader;
 import fi.okm.jod.ohjaaja.cms.testrunner.jitef.JitefWriter;
 import fi.okm.jod.ohjaaja.cms.testrunner.osgi.dispatch.TestExecutorDispatcher;
 import fi.okm.jod.ohjaaja.cms.testrunner.osgi.store.TestBundleStore;
+import jakarta.servlet.Servlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,10 +28,6 @@ import java.io.OutputStream;
 import java.io.Serial;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import javax.servlet.Servlet;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
@@ -44,26 +43,25 @@ import org.osgi.service.component.annotations.Component;
  *       Responds with {@code 200} and body {@code {"bundleId": N}}.
  *   <li>{@code DELETE /bundles/{bundleId}} - uninstalls the previously installed bundle.
  *   <li>{@code POST /run} - request body is JITEF {@code {"bundleId": N, "className": "...",
- *       "filteredMethods": ["m1", "m2"]}}; streams test events back as NDJITEF
- *       using chunked transfer encoding.
+ *       "filteredMethods": ["m1", "m2"]}}; streams test events back as NDJITEF using chunked
+ *       transfer encoding.
  * </ul>
  *
  * <p>The endpoint is intentionally unauthenticated; it must only be exposed inside the disposable
  * Docker test container.
  */
 @Component(
-    service = Servlet.class,
     property = {
-        "osgi.http.whiteboard.servlet.pattern=" + TestRunnerServlet.URL_PATTERN,
-        "osgi.http.whiteboard.servlet.name=jod-testrunner",
-        "osgi.http.whiteboard.context.select=(osgi.http.whiteboard.context.name=default)"
-    })
+      "osgi.http.whiteboard.servlet.pattern=" + TestRunnerServlet.URL_PATTERN,
+      "osgi.http.whiteboard.servlet.name=jod-testrunner",
+      "osgi.http.whiteboard.context.select=(osgi.http.whiteboard.context.name=default)"
+    },
+    service = Servlet.class)
 public class TestRunnerServlet extends HttpServlet {
 
   public static final String URL_PATTERN = "/jod-testrunner/*";
 
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
 
   private static final Log log = LogFactoryUtil.getLog(TestRunnerServlet.class);
 
@@ -191,7 +189,9 @@ public class TestRunnerServlet extends HttpServlet {
     } catch (Exception t) {
       // Best-effort: write an error event and rethrow as IOException so the servlet logs it.
       try {
-        String payload = JitefWriter.runErrorEvent(String.valueOf(t.getMessage()), t.getClass().getName()) + "\n";
+        String payload =
+            JitefWriter.runErrorEvent(String.valueOf(t.getMessage()), t.getClass().getName())
+                + "\n";
         out.write(payload.getBytes(StandardCharsets.UTF_8));
         out.flush();
       } catch (IOException ignored) {
@@ -250,8 +250,8 @@ public class TestRunnerServlet extends HttpServlet {
     }
 
     /**
-     * Parses a flat JITEF object with three fields. The
-     * client is under our control and produces a stable, simple shape.
+     * Parses a flat JITEF object with three fields. The client is under our control and produces a
+     * stable, simple shape.
      */
     static RunRequest parse(String payload) {
       String className = JitefReader.readRunRequestClassName(payload);
