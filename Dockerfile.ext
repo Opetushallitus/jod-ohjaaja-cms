@@ -1,7 +1,7 @@
 # Any instructions here will be appended to the end of the Dockerfile created by `createDockerfile`.
 RUN rm /opt/liferay/osgi/portal/*.commerce.*.jar \
   && rm -rf /opt/liferay/osgi/state/* \
-  && rm -rf /opt/liferay/data/elasticsearch7 \
+  && rm -rf /opt/liferay/data/elasticsearch8 \
   && rm -rf /opt/liferay/data/hypersonic
 
 FROM public.ecr.aws/amazoncorretto/amazoncorretto:21-al2023-headless
