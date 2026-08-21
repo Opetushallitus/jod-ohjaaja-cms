@@ -10,6 +10,7 @@ on:
         options:
           - dev
           - test
+          - production
       tag:
         type: string
         description: "Image tag to deploy"
