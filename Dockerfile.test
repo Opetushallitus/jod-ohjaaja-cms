@@ -1,4 +1,8 @@
-ARG LIFERAY_DOCKER_IMAGE=liferay/dxp:2026.q1.9-lts
+# No usable default on purpose: dockerBuildTestImage in build.gradle passes this via
+# --build-arg from gradle.properties. The sentinel below makes a build without that
+# argument fail immediately with a self-explaining error, instead of silently running
+# the integration tests against a stale Liferay version.
+ARG LIFERAY_DOCKER_IMAGE=liferay-docker-image-build-arg-required
 FROM ${LIFERAY_DOCKER_IMAGE}
 
 ENV LIFERAY_WORKSPACE_ENVIRONMENT=test

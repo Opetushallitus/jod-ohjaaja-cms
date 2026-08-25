@@ -15,16 +15,12 @@ import com.liferay.portal.kernel.search.BooleanClauseOccur;
 import com.liferay.portal.kernel.search.BooleanQuery;
 import com.liferay.portal.kernel.search.Field;
 import com.liferay.portal.kernel.search.ParseException;
-import com.liferay.portal.kernel.search.Query;
-import com.liferay.portal.kernel.search.SearchContext;
-import com.liferay.portal.kernel.search.generic.BooleanQueryImpl;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import com.liferay.portal.kernel.util.Validator;
 import com.liferay.portal.search.localization.SearchLocalizationHelper;
 import com.liferay.portal.search.spi.model.query.contributor.KeywordQueryContributor;
 import com.liferay.portal.search.spi.model.query.contributor.helper.KeywordQueryContributorHelper;
-import java.util.Locale;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -76,7 +72,7 @@ public class JodJournalArticleKeywordQueryContributor implements KeywordQueryCon
       BooleanQuery booleanQuery,
       KeywordQueryContributorHelper keywordQueryContributorHelper) {
 
-    SearchContext searchContext = keywordQueryContributorHelper.getSearchContext();
+    var searchContext = keywordQueryContributorHelper.getSearchContext();
 
     // Use provided keywords or fall back to keywords from search context
     if (Validator.isBlank(keywords)) {
@@ -88,29 +84,27 @@ public class JodJournalArticleKeywordQueryContributor implements KeywordQueryCon
     }
 
     // Retrieve localized title field names based on search context language
-    String[] localizedTitleFields =
+    var localizedTitleFields =
         searchLocalizationHelper.getLocalizedFieldNames(new String[] {Field.TITLE}, searchContext);
 
     // Create boosted query with SHOULD clauses for flexible matching
-    BooleanQuery boostedQuery = new BooleanQueryImpl();
-    Locale locale = LocaleUtil.fromLanguageId(searchContext.getLanguageId(), true, true);
-    String value = StringUtil.toLowerCase(keywords, locale);
+    var boostedQuery = new BooleanQuery();
+    var locale = LocaleUtil.fromLanguageId(searchContext.getLanguageId(), true, true);
+    var value = StringUtil.toLowerCase(keywords, locale);
 
     // Add term queries for each localized title field with boost factor
-    for (String fieldName : localizedTitleFields) {
+    for (var fieldName : localizedTitleFields) {
       try {
-        Query termQuery = boostedQuery.addTerm(fieldName, value, false, BooleanClauseOccur.SHOULD);
+        var termQuery = boostedQuery.addTerm(fieldName, value, false, BooleanClauseOccur.SHOULD);
         termQuery.setBoost(TITLE_BOOST);
       } catch (ParseException parseException) {
         log.error(parseException.getMessage(), parseException);
       }
     }
 
-    // Add the boosted query to the main boolean query as a SHOULD clause
-    try {
-      booleanQuery.add(boostedQuery, BooleanClauseOccur.SHOULD);
-    } catch (ParseException parseException) {
-      log.error(parseException.getMessage(), parseException);
-    }
+    // Add the boosted query to the main boolean query as a SHOULD clause.
+    // DXP 2026.Q2: BooleanQuery is a concrete class and add() no longer throws
+    // ParseException, so no try/catch is needed here.
+    booleanQuery.add(boostedQuery, BooleanClauseOccur.SHOULD);
   }
 }

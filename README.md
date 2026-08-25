@@ -81,12 +81,15 @@ Confirm the target tag is still Free Tier–eligible on [Community Downloads](ht
 ### Bumping the version
 
 1. Update `liferay.workspace.product` and `liferay.workspace.docker.image.liferay` in `gradle.properties` (keep them aligned).
-2. Locally: `./gradlew clean buildDockerImage` (or `./gradlew syncDockerEnv` if you only need `.env` updated), then verify with `docker compose up` / tests.
-3. Merge to `main`. The build packages an image from the new Docker base. While `gradle.properties` differs from GitHub variable `JOD_LIFERAY_DOCKER_IMAGE`, `upgrade_check` **skips** normal auto-deploy.
-4. Run workflow **`upgrade_liferay`** per environment (**dev → test → production**). It snapshots Aurora, deploys with DB auto-upgrade enabled, and waits for stability.
-5. After all environments are on the new image, set `JOD_LIFERAY_DOCKER_IMAGE` to the same value as `liferay.workspace.docker.image.liferay` so normal `deploy` jobs run again.
+2. Check whether newer `com.liferay.portal.test` / `com.liferay.portal.test.integration` versions have been published and refresh the `portal-test` / `portal-test-integration` pins in [`gradle/libs.versions.toml`](gradle/libs.versions.toml). They are **not** managed by `release.dxp.bom` or `release.dxp.api`, so they do not follow `liferay.workspace.product` on their own. The file documents the lookup commands.
+3. Locally: `./gradlew clean buildDockerImage` (or `./gradlew syncDockerEnv` if you only need `.env` updated), then verify with `docker compose up` / tests.
+4. Run the frontend resource regression check against the local instance: `scripts/check-frontend-resources.sh http://localhost:8080/ohjaaja/cms`. Every resource must report `OK`. **Never go below 2026.Q2** — the 2026.Q1 line cannot serve these resources at a multi-segment context path such as `/ohjaaja/cms`. See [docs/CONTEXT_PATH_REGRESSION.md](docs/CONTEXT_PATH_REGRESSION.md).
+5. Run `./gradlew testWithDockerContainer` to confirm the integration tests still compile and pass against the new runtime.
+6. Merge to `main`. The build packages an image from the new Docker base. While `gradle.properties` differs from GitHub variable `JOD_LIFERAY_DOCKER_IMAGE`, `upgrade_check` **skips** normal auto-deploy.
+7. Run workflow **`upgrade_liferay`** per environment (**dev → test → production**). It snapshots Aurora, deploys with DB auto-upgrade enabled, and waits for stability.
+8. After all environments are on the new image, set `JOD_LIFERAY_DOCKER_IMAGE` to the same value as `liferay.workspace.docker.image.liferay` so normal `deploy` jobs run again.
 
-See also [docs/WORKFLOW_METRICS.md](docs/WORKFLOW_METRICS.md) for the known Free Tier Workflow Metrics startup exception and mitigation.
+See also [docs/WORKFLOW_METRICS.md](docs/WORKFLOW_METRICS.md) for the known Free Tier Workflow Metrics startup exception and mitigation, and [docs/CONTEXT_PATH_REGRESSION.md](docs/CONTEXT_PATH_REGRESSION.md) for why the multi-segment context path `/ohjaaja/cms` requires 2026.Q2 or newer.
 
 ---
 
@@ -111,4 +114,4 @@ This builds and starts a Liferay test container, runs all modules ending with `-
 1. Create a module under `modules/` whose name ends with `-test` (e.g. `modules/jod-ohjaaja-cms-myfeature-test/`).
 2. It is discovered and included automatically.
 
-For detailed testing documentation, see [test/ARQUILLIAN_README.md](test/ARQUILLIAN_README.md).
+For detailed testing documentation, see [test/INTEGRATIO_TESTS.md](test/INTEGRATION_TESTS.md).

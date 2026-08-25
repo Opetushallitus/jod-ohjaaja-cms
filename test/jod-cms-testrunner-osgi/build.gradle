@@ -10,10 +10,8 @@ repositories {
   }
 }
 
-def dxpApiVersion = providers.gradleProperty("liferay.workspace.product")
-    .map { product -> product.replaceFirst(/^dxp-/, '').replaceFirst(/-lts$/, '') }
-    .orElse("2026.q1.9")
-    .get()
+// Version is derived in the root project from gradle.properties (no fallback).
+def dxpApiVersion = rootProject.jodLiferayArtifactVersion
 
 dependencies {
   // We only need the shared JITEF helpers from the client module; everything else there is
