@@ -4,7 +4,14 @@ liferay-workspace-plugin = "17.1.10"
 liferay-test-integration-plugin = "4.0.0"
 liferay-gradle-plugins = "16.1.206"
 
-# Liferay test libraries (align portal-test with Docker runtime jar)
+# Liferay test libraries. These are published on their own cadence and are NOT managed by
+# release.dxp.bom or release.dxp.api, so they cannot follow liferay.workspace.product
+# automatically. The rule is to use the newest published version and re-check it on every
+# Liferay version bump - see README "Bumping the version". Check for newer ones with:
+#   B=https://repository.liferay.com/nexus/content/groups/public/com/liferay/portal
+#   curl -s "$B/com.liferay.portal.test/maven-metadata.xml"             | grep -oP '(?<=<version>)[^<]+' | tail -5
+#   curl -s "$B/com.liferay.portal.test.integration/maven-metadata.xml" | grep -oP '(?<=<version>)[^<]+' | tail -5
+# Newest published as of DXP 2026.q2.9 (verified, integration tests green):
 portal-test = "32.7.0"
 portal-test-integration = "6.0.36"
 

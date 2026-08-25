@@ -16,7 +16,6 @@ import com.liferay.portal.kernel.search.BooleanQuery;
 import com.liferay.portal.kernel.search.Field;
 import com.liferay.portal.kernel.search.Query;
 import com.liferay.portal.kernel.search.SearchContext;
-import com.liferay.portal.kernel.search.generic.BooleanQueryImpl;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
@@ -152,7 +151,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
   @Test
   public void shouldAddBoostedTitleClauseForKeywords() {
     var searchContext = createSearchContext("Test Keyword");
-    var booleanQuery = new BooleanQueryImpl();
+    var booleanQuery = new BooleanQuery();
 
     contributor.contribute("Test Keyword", booleanQuery, helperFor(searchContext));
 
@@ -202,7 +201,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
   @Test
   public void shouldFallBackToSearchContextKeywords() {
     var searchContext = createSearchContext("fallback keyword");
-    var booleanQuery = new BooleanQueryImpl();
+    var booleanQuery = new BooleanQuery();
 
     // Pass blank keywords - the contributor should pick them up from the SearchContext instead.
     contributor.contribute("", booleanQuery, helperFor(searchContext));
@@ -215,7 +214,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
   @Test
   public void shouldNotAddClausesWhenKeywordsAreBlank() {
     var searchContext = createSearchContext(null);
-    var booleanQuery = new BooleanQueryImpl();
+    var booleanQuery = new BooleanQuery();
 
     contributor.contribute(null, booleanQuery, helperFor(searchContext));
 
@@ -227,7 +226,7 @@ public class JodJournalArticleKeywordQueryContributorTest {
   @Test
   public void shouldNotAddClausesWhenKeywordsAreEmpty() {
     var searchContext = createSearchContext("");
-    var booleanQuery = new BooleanQueryImpl();
+    var booleanQuery = new BooleanQuery();
 
     contributor.contribute("", booleanQuery, helperFor(searchContext));
 

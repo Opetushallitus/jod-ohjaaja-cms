@@ -11,14 +11,30 @@ subprojects { subproject ->
   }
 }
 
-def liferayDockerImage = providers.gradleProperty("liferay.workspace.docker.image.liferay")
-    .orElse("liferay/dxp:2026.q1.9-lts")
-    .get()
+// The Liferay product version has a single source of truth: gradle.properties.
+// There are deliberately no fallback values - a stale default would silently build
+// against the wrong Liferay version, which is worse than failing loudly.
+def requireProperty = { String name ->
+  def value = providers.gradleProperty(name).getOrNull()
+  if (value == null || value.trim().isEmpty()) {
+    throw new GradleException("Required Gradle property is missing: ${name} (see gradle.properties)")
+  }
+  return value.trim()
+}
 
-def liferayDxpTag = providers.gradleProperty("liferay.workspace.product")
-    .map { product -> product.replaceFirst(/^dxp-/, '') }
-    .orElse("2026.q1.9-lts")
-    .get()
+def liferayProduct = requireProperty('liferay.workspace.product')
+def liferayDockerImage = requireProperty('liferay.workspace.docker.image.liferay')
+
+// dxp-2026.q2.9 -> 2026.q2.9, dxp-2026.q1.9-lts -> 2026.q1.9-lts
+def liferayDxpTag = liferayProduct.replaceFirst(/^dxp-/, '')
+
+// Maven artifact versions do not carry the -lts suffix
+def liferayArtifactVersion = liferayDxpTag.replaceFirst(/-lts$/, '')
+
+// Exposed to subprojects so the version is derived in exactly one place.
+ext.jodLiferayDockerImage = liferayDockerImage
+ext.jodLiferayDxpTag = liferayDxpTag
+ext.jodLiferayArtifactVersion = liferayArtifactVersion
 
 tasks.register('syncDockerEnv') {
   group = 'build'
@@ -58,6 +74,8 @@ tasks.register('copyTestDockerfile', Copy) {
 }
 
 tasks.register('downloadPortalTestBundle', Copy) {
+  // release.dxp.bom does not manage com.liferay.portal.test, so the version is pinned
+  // in gradle/libs.versions.toml and must be refreshed on every Liferay version bump.
   from configurations.detachedConfiguration(
     dependencies.create("com.liferay.portal:com.liferay.portal.test:${libs.versions.portal.test.asProvider().get()}")
   )

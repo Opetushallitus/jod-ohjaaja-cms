@@ -1,10 +1,8 @@
 // Shared dependencies and test config for modules/*-test projects.
-// Liferay product version comes from gradle.properties (liferay.workspace.product).
+// The Liferay version is derived in the root project from gradle.properties
+// (liferay.workspace.product). There are deliberately no fallback versions.
 
-def dxpApiVersion = providers.gradleProperty("liferay.workspace.product")
-    .map { product -> product.replaceFirst(/^dxp-/, '').replaceFirst(/-lts$/, '') }
-    .orElse("2026.q1.9")
-    .get()
+def dxpApiVersion = rootProject.jodLiferayArtifactVersion
 
 repositories {
   mavenCentral()
@@ -19,6 +17,8 @@ dependencies {
   testImplementation libs.junit
 
   testImplementation "com.liferay.portal:release.dxp.api:${dxpApiVersion}"
+
+  // Pinned in gradle/libs.versions.toml - release.dxp.bom does not manage these.
   testImplementation libs.liferay.portal.test
   testImplementation libs.liferay.portal.test.integration
 

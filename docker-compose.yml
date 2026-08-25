@@ -36,6 +36,7 @@ services:
       - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_URL=jdbc:postgresql://postgres:5432/lportal?useUnicode=true&characterEncoding=UTF-8&useFastDateParsing=false
       - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_USERNAME=liferay
       - LIFERAY_JDBC_PERIOD_DEFAULT_PERIOD_PASSWORD=liferay
+      - JOD_OHJAAJA_CMS_CONTEXT=ohjaaja#cms
       # Set to true once when upgrading
       #- LIFERAY_UPGRADE_PERIOD_DATABASE_PERIOD_AUTO_PERIOD_RUN=true
     volumes:
