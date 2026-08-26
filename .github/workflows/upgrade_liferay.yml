@@ -73,14 +73,14 @@ jobs:
           image: ${{ secrets.JOD_ECR }}/oph/jod-ohjaaja-cms:${{ inputs.tag }}
           environment-variables: "LIFERAY_UPGRADE_PERIOD_DATABASE_PERIOD_AUTO_PERIOD_RUN=true"
 
-      - name: Scale ECS down
+      - name: Scale ECS service down
         run: |
           aws ecs update-service \
             --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
             --service ${{ secrets.JOD_ECS_SERVICE }} \
             --desired-count 0
 
-      - name: Wait until tasks are stopped
+      - name: Wait until service tasks are stopped
         timeout-minutes: 10
         run: |
           while true; do
@@ -94,28 +94,75 @@ jobs:
             sleep 10
           done
 
-      - name: Deploy ECS Service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@fc8fc60f3a60ffd500fcb13b209c59d221ac8c8c # v2
-        id: ecs-deploy
-        with:
-          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-          service: ${{ secrets.JOD_ECS_SERVICE }}
-          cluster: ${{ secrets.JOD_ECS_CLUSTER }}
-          desired-count: 1
-          wait-for-service-stability: true
-
-      - name: Ensure that deploy worked
+      - name: Register upgrade task definition
+        id: register
         run: |
-          CURRENT_TASK_DEF_ARN=$(aws ecs describe-services --cluster ${{ secrets.JOD_ECS_CLUSTER }} --services ${{ secrets.JOD_ECS_SERVICE }} --query services[0].deployments[0].taskDefinition --output text)
-          NEW_TASK_DEF_ARN=${{ steps.ecs-deploy.outputs.task-definition-arn }}
-          if [ "$CURRENT_TASK_DEF_ARN" != "$NEW_TASK_DEF_ARN" ]; then
-            echo "Deployment was rolled back"
-            exit 1
+          TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.render-task-def.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered: $TD_ARN"
+          echo "td_arn=$TD_ARN" >> $GITHUB_OUTPUT
+
+      - name: Run upgrade as a one-off task
+        id: run-task
+        run: |
+          NETCFG=$(aws ecs describe-services \
+            --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+            --services ${{ secrets.JOD_ECS_SERVICE }} \
+            --query 'services[0].networkConfiguration' --output json)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+            --task-definition ${{ steps.register.outputs.td_arn }} \
+            --count 1 \
+            --launch-type FARGATE \
+            --enable-execute-command \
+            --network-configuration "$NETCFG" \
+            --started-by "upgrade-wf-${{ github.run_id }}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Upgrade task: $TASK_ARN"
+          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+
+      - name: Wait for upgrade to complete (container reports HEALTHY)
+        timeout-minutes: 60
+        run: |
+          TASK="${{ steps.run-task.outputs.task_arn }}"
+          while true; do
+            read -r LAST HEALTH <<< "$(aws ecs describe-tasks \
+              --cluster ${{ secrets.JOD_ECS_CLUSTER }} --tasks "$TASK" \
+              --query 'tasks[0].[lastStatus,healthStatus]' --output text)"
+            echo "$(date -u +%H:%M:%S) status=$LAST health=$HEALTH"
+
+            if [ "$LAST" = "STOPPED" ]; then
+              echo "::error::Upgrade task stopped before becoming healthy"
+              aws ecs describe-tasks \
+                --cluster ${{ secrets.JOD_ECS_CLUSTER }} --tasks "$TASK" \
+                --query 'tasks[0].[stoppedReason,containers[0].exitCode]' --output text
+              exit 1
+            fi
+            [ "$HEALTH" = "HEALTHY" ] && break
+            sleep 20
+          done
+          echo "Upgrade completed — portal responded on its health check."
+
+      - name: Stop the one-off task
+        if: always()
+        run: |
+          TASK="${{ steps.run-task.outputs.task_arn }}"
+          if [ -n "$TASK" ] && [ "$TASK" != "None" ]; then
+            aws ecs stop-task \
+              --cluster ${{ secrets.JOD_ECS_CLUSTER }} \
+              --task "$TASK" \
+              --reason "Upgrade workflow finished (run ${{ github.run_id }})" >/dev/null || true
           fi
 
-      - name: Update image tag parameter
-        env:
-          TAG: ${{ inputs.tag }}
-        run: >
-          aws ssm put-parameter --overwrite --type String
-          --name ${{ vars.JOD_IMAGE_TAG_PARAM }} --value "${TAG##*:}"
+  deploy:
+    needs: upgrade
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+      contents: write
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
+      tag: ${{ inputs.tag }}
