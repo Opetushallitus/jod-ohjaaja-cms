@@ -38,7 +38,7 @@ public class ImportStudyProgramsSchedulerJobConfiguration implements SchedulerJo
   @Activate
   protected void activate() {
     triggerConfiguration =
-        TriggerConfiguration.createTriggerConfiguration("0 0 0 * * ?"); // Daily at midnight GMT
+        TriggerConfiguration.createTriggerConfiguration("0 0 16 * * ?");
   }
 
   @Override
