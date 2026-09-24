@@ -1,0 +1,10 @@
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compileOnly libs.liferay.dxp.api
+  compileInclude libs.jackson.datatype.jsr310
+  compileOnly project(":modules:jod-ohjaaja-cms-study-program-importer")
+  compileOnly project(":modules:jod-ohjaaja-cms-util")
+}
