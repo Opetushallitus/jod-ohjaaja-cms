@@ -1,0 +1,26 @@
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compileOnly libs.liferay.dxp.api
+  // Provided at runtime by Liferay's com.liferay.shared.dependencies.nimbusds bundle
+  compileOnly libs.nimbus.jose.jwt
+  compileOnly project(":modules:jod-ohjaaja-cms-util")
+
+  testImplementation libs.junit
+  testImplementation libs.liferay.dxp.api
+  testImplementation libs.nimbus.jose.jwt
+  testRuntimeOnly libs.log4j.api
+  testRuntimeOnly libs.log4j.core
+}
+
+test {
+  useJUnit()
+
+  // Liferay's LogFactoryUtil needs reflective access when initialized outside the portal
+  jvmArgs = [
+      '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+      '--add-opens=java.base/java.lang=ALL-UNNAMED'
+  ]
+}

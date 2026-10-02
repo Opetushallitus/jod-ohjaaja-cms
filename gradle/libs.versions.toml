@@ -1,6 +1,6 @@
 [versions]
 # Liferay Gradle plugins (product/Docker version lives in gradle.properties)
-liferay-workspace-plugin = "17.1.10"
+liferay-workspace-plugin = "17.1.11"
 liferay-test-integration-plugin = "4.0.0"
 liferay-gradle-plugins = "16.1.206"
 
@@ -41,6 +41,8 @@ javax-validation = "2.0.1.Final"
 # App libraries
 jackson-datatype-jsr310 = "2.18.7"
 pdfbox = "2.0.27"
+# Provided at runtime by Liferay (com.liferay.shared.dependencies.nimbusds); keep aligned with the bundled version.
+nimbus-jose-jwt = "10.4"
 
 [libraries]
 liferay-workspace-plugin = { module = "com.liferay:com.liferay.gradle.plugins.workspace", version.ref = "liferay-workspace-plugin" }
@@ -73,6 +75,7 @@ javax-validation-api = { module = "javax.validation:validation-api", version.ref
 bnd = { module = "biz.aQute.bnd:biz.aQute.bnd", version.ref = "bnd" }
 jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson-datatype-jsr310" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 
 [plugins]
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
