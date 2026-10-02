@@ -10,7 +10,7 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.EXTERNAL_REFERENCE_CODE;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
+import static fi.okm.jod.ohjaaja.cms.util.AdminUtil.getAdminUser;
 
 import com.liferay.data.engine.service.DEDataDefinitionFieldLinkLocalService;
 import com.liferay.dynamic.data.mapping.constants.DDMStructureConstants;
@@ -222,7 +222,7 @@ public class StudyProgramStructureService {
 
   public DDMStructure createDDMStructure() throws PortalException {
 
-    var user = getUser(PortalUtil.getDefaultCompanyId());
+    var user = getAdminUser(PortalUtil.getDefaultCompanyId());
     var fi = LocaleUtil.fromLanguageId("fi_FI");
     var sv = LocaleUtil.fromLanguageId("sv_SE");
     var en = LocaleUtil.fromLanguageId("en_US");

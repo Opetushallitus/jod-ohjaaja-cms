@@ -10,13 +10,22 @@
 package fi.okm.jod.ohjaaja.cms.tags.test;
 
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
+import com.liferay.portal.kernel.test.util.TestPropsValues;
+import com.liferay.portal.kernel.util.LocaleUtil;
+import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
 import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import fi.okm.jod.ohjaaja.cms.util.ServiceAccessPolicyInitializer;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -57,6 +66,143 @@ public class TagsServiceTest {
   public static void tearDownClass() {
     if (serviceReference != null && bundleContext != null) {
       bundleContext.ungetService(serviceReference);
+    }
+  }
+
+  @Test
+  public void shouldCreatePublicServiceAccessPolicyForTagsApi() throws Exception {
+    var sapEntryLocalService =
+        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
+
+    var sapEntry =
+        sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), "JOD_OHJAAJA_TAGS");
+
+    Assert.assertNotNull("SAP JOD_OHJAAJA_TAGS should exist", sapEntry);
+    Assert.assertTrue("SAP should be enabled", sapEntry.isEnabled());
+    Assert.assertTrue("SAP should apply to guests", sapEntry.isDefaultSAPEntry());
+    Assert.assertEquals(
+        "fi.okm.jod.ohjaaja.cms.tags.rest.application.TagsRestApplication#*",
+        sapEntry.getAllowedServiceSignatures());
+  }
+
+  @Test
+  public void shouldAllowOnlyFrontendHeadlessDeliveryEndpointsForGuests() throws Exception {
+    var sapEntryLocalService =
+        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
+
+    var sapEntry =
+        sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), "HEADLESS_ACCESS");
+
+    Assert.assertNotNull("SAP HEADLESS_ACCESS should exist", sapEntry);
+    Assert.assertTrue("SAP should be enabled", sapEntry.isEnabled());
+    Assert.assertTrue("SAP should apply to guests", sapEntry.isDefaultSAPEntry());
+    var resource =
+        "com.liferay.headless.delivery.internal.resource.v1_0.StructuredContentResourceImpl";
+    Assert.assertEquals(
+        Set.of(resource + "#getSiteStructuredContentsPage", resource + "#getStructuredContent"),
+        Set.copyOf(sapEntry.getAllowedServiceSignatures().lines().toList()));
+  }
+
+  @Test
+  public void shouldServePublicApisToGuestsAndBlockOthers() throws Exception {
+    var base = "http://localhost:8080/o";
+    var sites = base + "/headless-delivery/v1.0/sites/" + TEST_GROUP_ID;
+
+    Assert.assertEquals(200, guestGet(sites + "/structured-contents"));
+    Assert.assertEquals(200, guestGet(base + "/jod-tags/" + TEST_GROUP_ID));
+    Assert.assertEquals(200, guestGet(base + "/jod-navigation/" + TEST_GROUP_ID));
+    Assert.assertEquals(403, guestGet(sites + "/structured-contents/by-key/does-not-exist"));
+  }
+
+  private static int guestGet(String url) throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create(url)).header("Accept", "application/json").GET().build();
+    var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    System.out.println("GET " + url + " -> " + response.statusCode());
+    return response.statusCode();
+  }
+
+  @Test
+  public void shouldCreateServiceAccessPolicyWhenDefaultLocaleIsFinnish() throws Exception {
+    var sapEntryLocalService =
+        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
+    var serviceAccessPolicyInitializer =
+        bundleContext.getService(
+            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
+    var name = "JOD_OHJAAJA_TEST_FI_" + System.currentTimeMillis();
+    var originalDefault = LocaleUtil.getDefault();
+
+    // Real environments use company.default.locale=fi_FI, the test container uses en_US
+    LocaleUtil.setDefault("fi", "FI", "");
+    try {
+      serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, "a.B#c", "Test");
+      serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, "a.B#d", "Test");
+
+      var sapEntry = sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), name);
+      Assert.assertNotNull(sapEntry);
+      Assert.assertEquals("a.B#d", sapEntry.getAllowedServiceSignatures());
+      sapEntryLocalService.deleteSAPEntry(sapEntry.getSapEntryId());
+    } finally {
+      LocaleUtil.setDefault(
+          originalDefault.getLanguage(),
+          originalDefault.getCountry(),
+          originalDefault.getVariant());
+    }
+  }
+
+  @Test
+  public void shouldNotRewriteServiceAccessPolicyWhenOnlyFormattingDiffers() throws Exception {
+    var sapEntryLocalService =
+        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
+    var serviceAccessPolicyInitializer =
+        bundleContext.getService(
+            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
+    var name = "JOD_OHJAAJA_TEST_" + System.currentTimeMillis();
+
+    serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, "a.B#c\na.B#d", "Test");
+    var sapEntry = sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), name);
+    try {
+      sapEntry.setAllowedServiceSignatures("a.B#d\r\n\r\na.B#c\r\n");
+      sapEntryLocalService.updateSAPEntry(sapEntry);
+
+      serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, "a.B#c\na.B#d", "Test");
+
+      Assert.assertEquals(
+          "a.B#d\r\n\r\na.B#c\r\n",
+          sapEntryLocalService
+              .fetchSAPEntry(TestPropsValues.getCompanyId(), name)
+              .getAllowedServiceSignatures());
+    } finally {
+      sapEntryLocalService.deleteSAPEntry(sapEntry.getSapEntryId());
+    }
+  }
+
+  @Test
+  public void shouldOverwriteModifiedServiceAccessPolicy() throws Exception {
+    var sapEntryLocalService =
+        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
+    var serviceAccessPolicyInitializer =
+        bundleContext.getService(
+            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
+    var name = "JOD_OHJAAJA_TEST_" + System.currentTimeMillis();
+    var signature = TagsServiceTest.class.getName() + "#*";
+
+    serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, signature, "Test");
+    var sapEntry = sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), name);
+    try {
+      sapEntry.setEnabled(false);
+      sapEntry.setAllowedServiceSignatures("com.example.Other#*");
+      sapEntryLocalService.updateSAPEntry(sapEntry);
+
+      serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, signature, "Test");
+
+      var restored = sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), name);
+      Assert.assertEquals(sapEntry.getSapEntryId(), restored.getSapEntryId());
+      Assert.assertTrue(restored.isEnabled());
+      Assert.assertTrue(restored.isDefaultSAPEntry());
+      Assert.assertEquals(signature, restored.getAllowedServiceSignatures());
+    } finally {
+      sapEntryLocalService.deleteSAPEntry(sapEntry.getSapEntryId());
     }
   }
 

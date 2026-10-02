@@ -9,17 +9,14 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.background.scheduler;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
-
 import com.liferay.petra.function.UnsafeRunnable;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTaskManager;
-import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.scheduler.*;
-import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
-import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.security.auth.PrincipalThreadLocal;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.PortalUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
+import fi.okm.jod.ohjaaja.cms.util.AdminUtil;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -37,32 +34,33 @@ public class ImportStudyProgramsSchedulerJobConfiguration implements SchedulerJo
 
   @Activate
   protected void activate() {
-    triggerConfiguration =
-        TriggerConfiguration.createTriggerConfiguration("0 0 16 * * ?");
+    triggerConfiguration = TriggerConfiguration.createTriggerConfiguration("0 0 16 * * ?");
   }
 
   @Override
   public UnsafeRunnable<Exception> getJobExecutorUnsafeRunnable() {
     return () -> {
-      User user = getUser(PortalUtil.getDefaultCompanyId());
-      long userId = user.getUserId();
-      var checker = PermissionCheckerFactoryUtil.create(user);
-      PermissionThreadLocal.setPermissionChecker(checker);
+      var companyId = PortalUtil.getDefaultCompanyId();
+      AdminUtil.runAsAdmin(
+          companyId,
+          () -> {
+            long userId = PrincipalThreadLocal.getUserId();
 
-      ServiceContext serviceContext = new ServiceContext();
-      serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
-      serviceContext.setUserId(userId);
+            ServiceContext serviceContext = new ServiceContext();
+            serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
+            serviceContext.setUserId(userId);
 
-      var taskContextMap = new HashMap<String, Serializable>();
-      taskContextMap.put("errors", new ArrayList<String>());
+            var taskContextMap = new HashMap<String, Serializable>();
+            taskContextMap.put("errors", new ArrayList<String>());
 
-      backgroundTaskManager.addBackgroundTask(
-          userId,
-          PortalUtil.getDefaultCompanyId(),
-          "Study Program Import",
-          ImportStudyProgramsBackgroundTaskExecutor.class.getName(),
-          taskContextMap,
-          serviceContext);
+            backgroundTaskManager.addBackgroundTask(
+                userId,
+                companyId,
+                "Study Program Import",
+                ImportStudyProgramsBackgroundTaskExecutor.class.getName(),
+                taskContextMap,
+                serviceContext);
+          });
     };
   }
 

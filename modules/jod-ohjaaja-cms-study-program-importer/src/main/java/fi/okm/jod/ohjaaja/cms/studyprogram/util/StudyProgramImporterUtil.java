@@ -16,12 +16,7 @@ import com.liferay.dynamic.data.mapping.model.UnlocalizedValue;
 import com.liferay.dynamic.data.mapping.storage.DDMFormFieldValue;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
 import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
-import com.liferay.portal.kernel.exception.PortalException;
-import com.liferay.portal.kernel.model.User;
-import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.repository.model.FileEntry;
-import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
-import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import java.util.Locale;
 import java.util.Map;
@@ -98,22 +93,6 @@ public final class StudyProgramImporterUtil {
     fieldValue.setValue(localizedValue);
 
     return fieldValue;
-  }
-
-  public static User getUser(long companyId) throws PortalException {
-    var role = RoleLocalServiceUtil.fetchRole(companyId, RoleConstants.ADMINISTRATOR);
-
-    if (role == null) {
-      return UserLocalServiceUtil.getGuestUser(companyId);
-    }
-
-    var adminUsers = UserLocalServiceUtil.getRoleUsers(role.getRoleId(), 0, 1);
-
-    if (adminUsers.isEmpty()) {
-      return UserLocalServiceUtil.getGuestUser(companyId);
-    }
-
-    return adminUsers.getFirst();
   }
 
   public static boolean isActiveTask(BackgroundTask task) {

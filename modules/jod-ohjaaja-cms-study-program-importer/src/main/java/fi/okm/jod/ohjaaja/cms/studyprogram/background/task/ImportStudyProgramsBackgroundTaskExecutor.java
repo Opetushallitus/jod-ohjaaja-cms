@@ -14,6 +14,7 @@ import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporter
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.FINNISH;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.SWEDISH;
 import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.*;
+import static fi.okm.jod.ohjaaja.cms.util.AdminUtil.getAdminUser;
 
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
 import com.liferay.dynamic.data.mapping.model.LocalizedValue;
@@ -104,7 +105,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
     navigationService.getStudyProgramsParentMenuItem();
 
     var studyPrograms = konfoClient.fetchStudyPrograms();
-    var user = getUser(PortalUtil.getDefaultCompanyId());
+    var user = getAdminUser(PortalUtil.getDefaultCompanyId());
     var serviceContext = getServiceContext(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     var currentStudyProgramArticleExternalReferenceCodes =
         studyProgramImporter.getImportedStudyPrograms().stream()
@@ -185,7 +186,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
               SWEDISH,
               studyProgram.nimi().getOrDefault("sv", studyProgram.nimi().getOrDefault("fi", "")));
 
-      var content = getContent(structure, studyProgram, titleMap);
+      var content = getContent(structure, studyProgram, titleMap, user.getUserId());
 
       if (journalArticle != null) {
         log.info("Study program already imported: " + studyProgram.oid() + ". Updating article.");
@@ -219,7 +220,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
                 serviceContext);
       }
       navigationService.addOrUpdateStudyProgramNavigationMenuItem(journalArticle, serviceContext);
-      studyProgramCategoryService.setJournalArticleCategories(journalArticle);
+      studyProgramCategoryService.setJournalArticleCategories(journalArticle, user.getUserId());
     } catch (Exception e) {
       log.error("Failed to import study program: " + studyProgram.oid(), e);
       reportError(
@@ -301,7 +302,10 @@ public class ImportStudyProgramsBackgroundTaskExecutor
   }
 
   private String getContent(
-      DDMStructure structure, StudyProgramDto studyProgram, Map<Locale, String> titleMap)
+      DDMStructure structure,
+      StudyProgramDto studyProgram,
+      Map<Locale, String> titleMap,
+      long userId)
       throws Exception {
     var ddmForm = structure.getDDMForm();
     var formValues = new DDMFormValues(ddmForm);
@@ -318,7 +322,8 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
     if (Validator.isNotNull(studyProgram.teemakuva())) {
       var imageUrl = studyProgram.teemakuva();
-      var fileEntry = studyProgramFileService.getStudyProgramImage(imageUrl, studyProgram.oid());
+      var fileEntry =
+          studyProgramFileService.getStudyProgramImage(imageUrl, studyProgram.oid(), userId);
       if (fileEntry != null) {
         var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
         formValues.addDDMFormFieldValue(imageFormFieldValue);
@@ -327,7 +332,7 @@ public class ImportStudyProgramsBackgroundTaskExecutor
         formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
       }
     } else {
-      var fileEntry = studyProgramFileService.getStudyProgramImagePlaceholder();
+      var fileEntry = studyProgramFileService.getStudyProgramImagePlaceholder(userId);
       if (fileEntry != null) {
         var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
         formValues.addDDMFormFieldValue(imageFormFieldValue);
