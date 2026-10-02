@@ -37,8 +37,7 @@ public class ImportStudyProgramsSchedulerJobConfiguration implements SchedulerJo
 
   @Activate
   protected void activate() {
-    triggerConfiguration =
-        TriggerConfiguration.createTriggerConfiguration("0 0 16 * * ?");
+    triggerConfiguration = TriggerConfiguration.createTriggerConfiguration("0 0 16 * * ?");
   }
 
   @Override

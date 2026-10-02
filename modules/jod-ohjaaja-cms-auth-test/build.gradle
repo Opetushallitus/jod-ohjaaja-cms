@@ -1,0 +1,10 @@
+plugins {
+  id 'java'
+}
+
+apply from: rootProject.file('gradle/jod.integration-test.gradle')
+
+dependencies {
+  testImplementation project(':modules:jod-ohjaaja-cms-util')
+  testImplementation project(':modules:jod-ohjaaja-cms-auth')
+}

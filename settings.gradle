@@ -7,6 +7,7 @@ include ':modules:jod-ohjaaja-cms-tags-test'
 include ':modules:jod-ohjaaja-cms-navigation-test'
 include ':modules:jod-ohjaaja-cms-study-program-importer-test'
 include ':modules:jod-ohjaaja-cms-search-test'
+include ':modules:jod-ohjaaja-cms-auth-test'
 
 // Version catalog (libs) is not visible inside buildscript {}; read plugin versions from
 // gradle/libs.versions.toml so settings.gradle stays aligned with the catalog SoT.

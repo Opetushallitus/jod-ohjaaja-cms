@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+
+<!--
+	Overrides META-INF/module-log4j.xml of com.liferay.application.list.api, which sets
+	PanelAppRegistry to INFO. Liferay's system object definitions (cookie and CMS objects) register
+	panel apps without a category or order, which logs a line per pair on every control panel render.
+-->
+<Configuration strict="true">
+	<Loggers>
+		<Logger level="WARN" name="com.liferay.application.list.PanelAppRegistry" />
+	</Loggers>
+</Configuration>

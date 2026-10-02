@@ -10,8 +10,13 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.constants;
 
 public final class OhjaajaPanelCategoryKeys {
+  /**
+   * The key must start with "site_administration." Liferay checks control panel access of the
+   * portlets in this category against the site only for such categories (BaseControlPanelEntry);
+   * otherwise site role permissions are ignored and only administrators see the apps.
+   */
   public static final String OHJAAJA_PANEL_CATEGORY_KEY =
-      "fi_okm_jod_ohjaaja_cms_ohjaaja_panel_category";
+      "site_administration.fi_okm_jod_ohjaaja_cms_ohjaaja";
 
   private OhjaajaPanelCategoryKeys() {}
 }
