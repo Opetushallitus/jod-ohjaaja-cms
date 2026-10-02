@@ -10,7 +10,6 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.*;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
 
 import com.liferay.document.library.kernel.model.DLVersionNumberIncrease;
 import com.liferay.document.library.kernel.service.DLAppLocalService;
@@ -22,7 +21,6 @@ import com.liferay.portal.kernel.repository.model.Folder;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.HttpUtil;
 import com.liferay.portal.kernel.util.MimeTypesUtil;
-import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.exception.StudyProgramImageFolderDeleteException;
@@ -40,7 +38,7 @@ public class StudyProgramFileService {
   @Reference private DLAppLocalService dlAppLocalService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
-  public FileEntry getStudyProgramImage(String imageUrl, String oid) {
+  public FileEntry getStudyProgramImage(String imageUrl, String oid, long userId) {
 
     String fileName;
     try {
@@ -53,7 +51,7 @@ public class StudyProgramFileService {
     try {
       var bytes = HttpUtil.URLtoByteArray(imageUrl);
 
-      return getOrCreateFileEntryByExternalReferenceCode(oid, fileName, bytes);
+      return getOrCreateFileEntryByExternalReferenceCode(oid, fileName, bytes, userId);
 
     } catch (Exception e) {
       log.error("Failed to fetch or store image from URL: " + imageUrl, e);
@@ -62,13 +60,16 @@ public class StudyProgramFileService {
     return null;
   }
 
-  public FileEntry getStudyProgramImagePlaceholder() {
+  public FileEntry getStudyProgramImagePlaceholder(long userId) {
 
     try {
       var bytes =
           readImageBytes(StudyProgramImporterConstants.STUDY_PROGRAM_PLACEHOLDER_IMAGE_PATH);
       return getOrCreateFileEntryByExternalReferenceCode(
-          STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC, STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME, bytes);
+          STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC,
+          STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME,
+          bytes,
+          userId);
     } catch (IOException e) {
       log.error("Failed to read placeholder image from resources", e);
       return null;
@@ -76,9 +77,8 @@ public class StudyProgramFileService {
   }
 
   public FileEntry getOrCreateFileEntryByExternalReferenceCode(
-      String externalReferenceCode, String fileName, byte[] bytes) {
+      String externalReferenceCode, String fileName, byte[] bytes, long userId) {
     try {
-      var userId = getUser(PortalUtil.getDefaultCompanyId()).getUserId();
       var folderId = getOrCreateImageFolderId(userId);
 
       var serviceContext = new ServiceContext();

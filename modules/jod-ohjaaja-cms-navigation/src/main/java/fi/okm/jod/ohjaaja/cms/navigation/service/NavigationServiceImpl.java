@@ -10,7 +10,7 @@
 package fi.okm.jod.ohjaaja.cms.navigation.service;
 
 import com.liferay.asset.kernel.model.AssetCategory;
-import com.liferay.asset.kernel.service.AssetCategoryService;
+import com.liferay.asset.kernel.service.AssetCategoryLocalService;
 import com.liferay.expando.kernel.model.ExpandoBridge;
 import com.liferay.expando.kernel.model.ExpandoColumn;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
@@ -18,29 +18,29 @@ import com.liferay.expando.kernel.model.ExpandoTableConstants;
 import com.liferay.expando.kernel.service.ExpandoColumnLocalServiceUtil;
 import com.liferay.expando.kernel.util.ExpandoBridgeFactoryUtil;
 import com.liferay.journal.model.JournalArticle;
-import com.liferay.journal.model.JournalArticleResource;
-import com.liferay.journal.service.JournalArticleResourceLocalService;
-import com.liferay.journal.service.JournalArticleService;
+import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.ClassedModel;
 import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.role.RoleConstants;
-import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
+import com.liferay.portal.kernel.security.auth.PrincipalThreadLocal;
 import com.liferay.portal.kernel.security.permission.ActionKeys;
-import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.security.permission.ResourceActionsUtil;
+import com.liferay.portal.kernel.security.permission.resource.ModelResourcePermission;
 import com.liferay.portal.kernel.service.ResourcePermissionLocalServiceUtil;
 import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
-import com.liferay.portal.kernel.service.UserLocalServiceUtil;
+import com.liferay.portal.kernel.util.GetterUtil;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.UnicodeProperties;
 import com.liferay.portal.kernel.util.UnicodePropertiesBuilder;
+import com.liferay.portal.kernel.util.Validator;
+import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import com.liferay.portal.language.override.service.PLOEntryLocalService;
-import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.site.navigation.model.SiteNavigationMenu;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
@@ -53,12 +53,11 @@ import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMe
 import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationInitializationException;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistenceException;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
-import fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication;
+import fi.okm.jod.ohjaaja.cms.util.AdminUtil;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.osgi.service.component.annotations.Component;
@@ -71,17 +70,13 @@ public class NavigationServiceImpl implements NavigationService {
   private static final String LANGUAGE_ID_FI_FI = "fi_FI";
 
   private static final String PROPERTY_CLASS_PK = "classPK";
+  private static final String PROPERTY_EXTERNAL_REFERENCE_CODE = "externalReferenceCode";
   private static final String PROPERTY_TITLE = "title";
 
   private static final String ASSET_CATEGORY_CLASS_NAME =
       "com.liferay.asset.kernel.model.AssetCategory";
   private static final String JOURNAL_ARTICLE_CLASS_NAME =
       "com.liferay.journal.model.JournalArticle";
-
-  private static final String SAP_ENTRY_NAME = "JOD_OHJAAJA_NAVIGATION";
-  private static final Map<Locale, String> SAP_DESCRIPTION =
-      Map.of(LocaleUtil.fromLanguageId(LANGUAGE_ID_EN_US), "Public access JOD OHJAAJA NAVIGATION");
-  private static final String SERVICE_SIGNATURE = NavigationRestApplication.class.getName() + "#*";
 
   private static final String TYPE_CUSTOM_FIELD_NAME = "Type";
   private static final String HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME =
@@ -147,10 +142,15 @@ public class NavigationServiceImpl implements NavigationService {
 
   @Reference private SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
   @Reference private SiteNavigationMenuService siteNavigationMenuService;
-  @Reference private AssetCategoryService assetCategoryService;
-  @Reference private JournalArticleService journalArticleService;
-  @Reference private JournalArticleResourceLocalService journalArticleResourceLocalService;
-  @Reference private SAPEntryLocalService sapEntryLocalService;
+  @Reference private AssetCategoryLocalService assetCategoryLocalService;
+  @Reference private JournalArticleLocalService journalArticleLocalService;
+
+  @Reference(target = "(model.class.name=com.liferay.asset.kernel.model.AssetCategory)")
+  private ModelResourcePermission<AssetCategory> assetCategoryModelResourcePermission;
+
+  @Reference(target = "(model.class.name=com.liferay.journal.model.JournalArticle)")
+  private ModelResourcePermission<JournalArticle> journalArticleModelResourcePermission;
+
   @Reference private PLOEntryLocalService ploEntryLocalService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
@@ -169,11 +169,6 @@ public class NavigationServiceImpl implements NavigationService {
 
   @Override
   public void initNavigation() {
-    try {
-      sapEntryLocalService.getSAPEntry(PortalUtil.getDefaultCompanyId(), SAP_ENTRY_NAME);
-    } catch (PortalException portalException) {
-      initServiceAccessPolicy();
-    }
     initCustomFields();
   }
 
@@ -294,8 +289,9 @@ public class NavigationServiceImpl implements NavigationService {
 
     var type = getSiteNavigationMenuItemType(siteNavigationMenuItem);
     var unicodeProperties = getUnicodeProperties(siteNavigationMenuItem);
-    var assetCategory = getAssetCategory(type, unicodeProperties);
-    var journalArticle = getJournalArticle(type, unicodeProperties);
+    var groupId = siteNavigationMenuItem.getGroupId();
+    var assetCategory = getAssetCategory(type, unicodeProperties, groupId);
+    var journalArticle = getJournalArticle(type, unicodeProperties, groupId);
     var name = getName(assetCategory, journalArticle, type, unicodeProperties, languageId);
     var nameI18n = getNameI18n(assetCategory, journalArticle, type);
     var description = getDescription(assetCategory, journalArticle, type, languageId);
@@ -362,32 +358,64 @@ public class NavigationServiceImpl implements NavigationService {
     return UnicodePropertiesBuilder.fastLoad(siteNavigationMenuItem.getTypeSettings()).build();
   }
 
+  // Menu items reference their target either by classPK or, when created in the DXP 2026 UI, by
+  // externalReferenceCode. If the target cannot be resolved or the user may not view it, the item
+  // is still returned, without an ID and with the title stored in the menu item's typeSettings.
   private AssetCategory getAssetCategory(
-      SiteNavigationMenuItemType type, UnicodeProperties unicodeProperties) {
+      SiteNavigationMenuItemType type, UnicodeProperties unicodeProperties, long groupId) {
     if (type != SiteNavigationMenuItemType.ASSET_CATEGORY) {
       return null;
     }
-    try {
-      return assetCategoryService.fetchCategory(
-          Long.parseLong(unicodeProperties.get(PROPERTY_CLASS_PK)));
-    } catch (PortalException e) {
-      return null;
+    var categoryId = GetterUtil.getLong(unicodeProperties.get(PROPERTY_CLASS_PK));
+    AssetCategory assetCategory;
+    if (categoryId > 0) {
+      assetCategory = assetCategoryLocalService.fetchAssetCategory(categoryId);
+    } else {
+      var externalReferenceCode = unicodeProperties.get(PROPERTY_EXTERNAL_REFERENCE_CODE);
+      if (Validator.isNull(externalReferenceCode)) {
+        return null;
+      }
+      assetCategory =
+          assetCategoryLocalService.fetchAssetCategoryByExternalReferenceCode(
+              externalReferenceCode, groupId);
     }
+    return canView(assetCategoryModelResourcePermission, assetCategory) ? assetCategory : null;
   }
 
+  // Only the latest approved version is shown: a newer draft must not hide a published article
   private JournalArticle getJournalArticle(
-      SiteNavigationMenuItemType type, UnicodeProperties unicodeProperties) {
+      SiteNavigationMenuItemType type, UnicodeProperties unicodeProperties, long groupId) {
     if (type != SiteNavigationMenuItemType.JOURNAL_ARTICLE) {
       return null;
     }
+    var resourcePrimKey = GetterUtil.getLong(unicodeProperties.get(PROPERTY_CLASS_PK));
+    JournalArticle journalArticle;
+    if (resourcePrimKey > 0) {
+      journalArticle =
+          journalArticleLocalService.fetchLatestArticle(
+              resourcePrimKey, WorkflowConstants.STATUS_APPROVED);
+    } else {
+      var externalReferenceCode = unicodeProperties.get(PROPERTY_EXTERNAL_REFERENCE_CODE);
+      if (Validator.isNull(externalReferenceCode)) {
+        return null;
+      }
+      journalArticle =
+          journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
+              groupId, externalReferenceCode, WorkflowConstants.STATUS_APPROVED, true);
+    }
+    return canView(journalArticleModelResourcePermission, journalArticle) ? journalArticle : null;
+  }
+
+  private static <T extends ClassedModel> boolean canView(
+      ModelResourcePermission<T> modelResourcePermission, T model) {
+    var permissionChecker = PermissionThreadLocal.getPermissionChecker();
+    if (model == null || permissionChecker == null) {
+      return false;
+    }
     try {
-      var journalArticleResourcePrimaryKey =
-          Long.parseLong(unicodeProperties.get(PROPERTY_CLASS_PK));
-      JournalArticleResource journalArticleResource =
-          journalArticleResourceLocalService.getArticleResource(journalArticleResourcePrimaryKey);
-      return journalArticleService.getArticle(journalArticleResource.getLatestArticlePK());
+      return modelResourcePermission.contains(permissionChecker, model, ActionKeys.VIEW);
     } catch (PortalException e) {
-      return null;
+      return false;
     }
   }
 
@@ -477,70 +505,42 @@ public class NavigationServiceImpl implements NavigationService {
     };
   }
 
-  private void initServiceAccessPolicy() {
-    try {
-      sapEntryLocalService.addSAPEntry(
-          GuestOrUserUtil.getGuestOrUser(PortalUtil.getDefaultCompanyId()).getUserId(),
-          SERVICE_SIGNATURE,
-          true,
-          true,
-          SAP_ENTRY_NAME,
-          SAP_DESCRIPTION,
-          new ServiceContext());
-    } catch (PortalException e) {
-      throw new NavigationInitializationException(
-          "Failed to initialize service access policy " + SAP_ENTRY_NAME, e);
-    }
-  }
-
   private void initCustomFields() {
+    var companyId = PortalUtil.getDefaultCompanyId();
     try {
-      var role =
-          RoleLocalServiceUtil.fetchRole(
-              PortalUtil.getDefaultCompanyId(), RoleConstants.ADMINISTRATOR);
-      var adminUsers = UserLocalServiceUtil.getRoleUsers(role.getRoleId(), 0, 1);
-      if (adminUsers.isEmpty()) {
-        log.warn("No admin users found, using guest user for permission checker");
-      }
-      var user =
-          adminUsers.isEmpty()
-              ? UserLocalServiceUtil.getGuestUser(PortalUtil.getDefaultCompanyId())
-              : adminUsers.getFirst();
-      var checker = PermissionCheckerFactoryUtil.create(user);
-      PermissionThreadLocal.setPermissionChecker(checker);
-      var expandoBridge =
-          ExpandoBridgeFactoryUtil.getExpandoBridge(
-              PortalUtil.getDefaultCompanyId(), SiteNavigationMenuItem.class.getName());
+      AdminUtil.runAsAdmin(
+          companyId,
+          () -> {
+            var userId = PrincipalThreadLocal.getUserId();
+            var expandoBridge =
+                ExpandoBridgeFactoryUtil.getExpandoBridge(
+                    companyId, SiteNavigationMenuItem.class.getName());
 
-      for (var customFieldData : CUSTOM_FIELDS) {
-        initCustomField(
-            expandoBridge,
-            customFieldData.name(),
-            customFieldData.type(),
-            customFieldData.defaultValue(),
-            customFieldData.propertyDisplayType());
-        grantUserPermissionsForCustomField(customFieldData.name());
+            for (var customFieldData : CUSTOM_FIELDS) {
+              initCustomField(
+                  expandoBridge,
+                  customFieldData.name(),
+                  customFieldData.type(),
+                  customFieldData.defaultValue(),
+                  customFieldData.propertyDisplayType());
+              grantUserPermissionsForCustomField(customFieldData.name());
 
-        customFieldData.localizationMap.forEach(
-            (locale, name) -> {
-              try {
-                ploEntryLocalService.addOrUpdatePLOEntry(
-                    PortalUtil.getDefaultCompanyId(),
-                    user.getUserId(),
-                    customFieldData.name(),
-                    locale,
-                    name);
-              } catch (PortalException e) {
-                log.error(
-                    "Failed to add or update PLO entry for custom field "
-                        + customFieldData.name()
-                        + " and locale "
-                        + locale,
-                    e);
-              }
-            });
-      }
-
+              customFieldData.localizationMap.forEach(
+                  (locale, name) -> {
+                    try {
+                      ploEntryLocalService.addOrUpdatePLOEntry(
+                          companyId, userId, customFieldData.name(), locale, name);
+                    } catch (PortalException e) {
+                      log.error(
+                          "Failed to add or update PLO entry for custom field "
+                              + customFieldData.name()
+                              + " and locale "
+                              + locale,
+                          e);
+                    }
+                  });
+            }
+          });
     } catch (PortalException e) {
       throw new NavigationInitializationException(
           "Failed to initialize navigation custom fields", e);

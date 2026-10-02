@@ -23,11 +23,9 @@ import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.Portal;
-import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.portlet.asset.util.AssetVocabularySettingsHelper;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
-import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
@@ -63,7 +61,8 @@ public class StudyProgramCategoryService {
     }
   }
 
-  public void setJournalArticleCategories(JournalArticle article) throws PortalException {
+  public void setJournalArticleCategories(JournalArticle article, long userId)
+      throws PortalException {
     var categoryIds =
         new long[] {
           getStudyProgramTagCategory().id(),
@@ -71,8 +70,7 @@ public class StudyProgramCategoryService {
           getStudyProgramParentCategory().getCategoryId()
         };
 
-    var user = StudyProgramImporterUtil.getUser(PortalUtil.getDefaultCompanyId());
-    journalArticleLocalService.updateAsset(user.getUserId(), article, categoryIds, null, null, 0.0);
+    journalArticleLocalService.updateAsset(userId, article, categoryIds, null, null, 0.0);
   }
 
   private JodTaxonomyCategoryDto getStudyProgramTagCategory() {

@@ -9,7 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.background.task;
 
-import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.getUser;
+import static fi.okm.jod.ohjaaja.cms.util.AdminUtil.getAdminUser;
 
 import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
 import com.liferay.portal.kernel.backgroundtask.BackgroundTask;
@@ -47,7 +47,7 @@ public abstract class BaseStudyProgramBackgroundTaskExecutor extends BaseBackgro
   }
 
   protected ServiceContext getServiceContext(Long groupId) throws PortalException {
-    var user = getUser(PortalUtil.getDefaultCompanyId());
+    var user = getAdminUser(PortalUtil.getDefaultCompanyId());
 
     var serviceContext = new ServiceContext();
     serviceContext.setAddGroupPermissions(true);
