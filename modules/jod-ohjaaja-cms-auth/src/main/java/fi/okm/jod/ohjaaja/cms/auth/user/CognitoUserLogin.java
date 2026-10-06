@@ -23,9 +23,11 @@ import com.liferay.portal.kernel.util.Validator;
 import fi.okm.jod.ohjaaja.cms.auth.jwt.OidcIdentity;
 import fi.okm.jod.ohjaaja.cms.auth.role.RoleMapping;
 import fi.okm.jod.ohjaaja.cms.auth.role.RoleSynchronizer;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Allowed;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.DenialReason;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Denied;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.Objects;
-import java.util.Optional;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -49,19 +51,19 @@ public class CognitoUserLogin {
   @Reference private RoleSynchronizer roleSynchronizer;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
-  /** Returns the user to log in, or an empty value if the identity is not allowed to log in. */
-  public Optional<User> login(long companyId, OidcIdentity identity) throws PortalException {
+  /** Returns the user to log in, or the reason why the identity is not allowed to log in. */
+  public LoginResult login(long companyId, OidcIdentity identity) throws PortalException {
     if (RoleMapping.resolve(identity.groups()).isEmpty()) {
       log.info("Cognito user " + identity.sub() + " has no CMS groups, not logging in");
       revokeMappedRoles(companyId, identity);
-      return Optional.empty();
+      return new Denied(DenialReason.NO_ACCESS);
     }
     var user = getOrCreateUser(companyId, identity);
     if (user == null) {
-      return Optional.empty();
+      return new Denied(DenialReason.ACCOUNT_CONFLICT);
     }
     roleSynchronizer.synchronize(user, identity.groups());
-    return Optional.of(user);
+    return new Allowed(user);
   }
 
   private void revokeMappedRoles(long companyId, OidcIdentity identity) throws PortalException {
