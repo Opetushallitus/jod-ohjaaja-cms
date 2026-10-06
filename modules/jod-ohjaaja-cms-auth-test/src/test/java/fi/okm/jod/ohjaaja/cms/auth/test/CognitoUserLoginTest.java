@@ -30,11 +30,14 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.auth.jwt.OidcIdentity;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRoleInitializer;
 import fi.okm.jod.ohjaaja.cms.auth.user.CognitoUserLogin;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Allowed;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.DenialReason;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Denied;
 import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -108,7 +111,7 @@ public class CognitoUserLoginTest {
   public void testNewUserIsCreatedAndLinked() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
 
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
 
     Assert.assertEquals(identity.sub(), user.getExternalReferenceCode());
     Assert.assertEquals(identity.email(), user.getEmailAddress());
@@ -122,11 +125,11 @@ public class CognitoUserLoginTest {
   @Test
   public void testKnownUserIsFoundBySubjectAndUpdated() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
 
     var changed =
         new OidcIdentity(identity.sub(), randomEmail(), true, "Maija", "Mallikas", ADMIN_GROUPS);
-    var updated = login(changed).orElseThrow();
+    var updated = loginAllowed(changed);
 
     Assert.assertEquals(user.getUserId(), updated.getUserId());
     Assert.assertEquals(changed.email(), updated.getEmailAddress());
@@ -140,7 +143,7 @@ public class CognitoUserLoginTest {
     var identity =
         new OidcIdentity(UUID.randomUUID().toString(), email, true, null, null, ADMIN_GROUPS);
 
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
 
     var emailName = email.substring(0, email.indexOf('@'));
     Assert.assertEquals(emailName, user.getFirstName());
@@ -150,11 +153,11 @@ public class CognitoUserLoginTest {
   @Test
   public void testMissingNamesDoNotOverwriteExistingNames() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
-    login(identity).orElseThrow();
+    loginAllowed(identity);
 
     var withoutNames =
         new OidcIdentity(identity.sub(), identity.email(), true, null, null, ADMIN_GROUPS);
-    var user = login(withoutNames).orElseThrow();
+    var user = loginAllowed(withoutNames);
 
     Assert.assertEquals("Matti", user.getFirstName());
     Assert.assertEquals("Meikäläinen", user.getLastName());
@@ -163,12 +166,12 @@ public class CognitoUserLoginTest {
   @Test
   public void testUnverifiedEmailIsNotUpdated() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
-    login(identity).orElseThrow();
+    loginAllowed(identity);
 
     var unverified =
         new OidcIdentity(
             identity.sub(), randomEmail(), false, "Matti", "Meikäläinen", ADMIN_GROUPS);
-    var user = login(unverified).orElseThrow();
+    var user = loginAllowed(unverified);
 
     Assert.assertEquals(identity.email(), user.getEmailAddress());
   }
@@ -178,7 +181,7 @@ public class CognitoUserLoginTest {
     var existing = addUnlinkedUser();
     var identity = identity(existing.getEmailAddress(), ADMIN_GROUPS);
 
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
 
     Assert.assertEquals(existing.getUserId(), user.getUserId());
     Assert.assertEquals(identity.sub(), user.getExternalReferenceCode());
@@ -197,7 +200,7 @@ public class CognitoUserLoginTest {
             "Meikäläinen",
             ADMIN_GROUPS);
 
-    Assert.assertTrue(login(identity).isEmpty());
+    assertDenied(DenialReason.ACCOUNT_CONFLICT, login(identity));
 
     var user = userLocalService.getUser(existing.getUserId());
     Assert.assertEquals(user.getUuid(), user.getExternalReferenceCode());
@@ -209,11 +212,11 @@ public class CognitoUserLoginTest {
   public void testUserLinkedToOtherSubjectIsNotRelinked() throws Exception {
     var existing = addUnlinkedUser();
     var first = identity(existing.getEmailAddress(), ADMIN_GROUPS);
-    login(first).orElseThrow();
+    loginAllowed(first);
 
     var second = identity(existing.getEmailAddress(), ADMIN_GROUPS);
 
-    Assert.assertTrue(login(second).isEmpty());
+    assertDenied(DenialReason.ACCOUNT_CONFLICT, login(second));
     Assert.assertEquals(
         first.sub(), userLocalService.getUser(existing.getUserId()).getExternalReferenceCode());
     Assert.assertNull(userLocalService.fetchUserByExternalReferenceCode(second.sub(), companyId));
@@ -222,7 +225,7 @@ public class CognitoUserLoginTest {
   @Test
   public void testMappedRolesAreRevokedWhenLastGroupIsRemoved() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
     var unmappedRole = addUnmappedRole(user);
     Assert.assertTrue(hasAdministratorRole(user));
 
@@ -235,7 +238,7 @@ public class CognitoUserLoginTest {
             identity.familyName(),
             List.of("unknown-group"));
 
-    Assert.assertTrue(login(withoutGroups).isEmpty());
+    assertDenied(DenialReason.NO_ACCESS, login(withoutGroups));
     Assert.assertFalse(hasAdministratorRole(user));
     Assert.assertTrue(userLocalService.hasRoleUser(unmappedRole.getRoleId(), user.getUserId()));
   }
@@ -245,7 +248,7 @@ public class CognitoUserLoginTest {
     var existing = addUnlinkedUser();
     userLocalService.addRoleUser(administratorRole.getRoleId(), existing.getUserId());
 
-    Assert.assertTrue(login(identity(existing.getEmailAddress(), List.of())).isEmpty());
+    assertDenied(DenialReason.NO_ACCESS, login(identity(existing.getEmailAddress(), List.of())));
 
     var user = userLocalService.getUser(existing.getUserId());
     Assert.assertEquals(user.getUuid(), user.getExternalReferenceCode());
@@ -255,11 +258,11 @@ public class CognitoUserLoginTest {
   @Test
   public void testDeactivatedUserIsNotLoggedIn() throws Exception {
     var identity = identity(randomEmail(), ADMIN_GROUPS);
-    var user = login(identity).orElseThrow();
+    var user = loginAllowed(identity);
     userLocalService.updateStatus(
         user.getUserId(), WorkflowConstants.STATUS_INACTIVE, new ServiceContext());
 
-    Assert.assertTrue(login(identity).isEmpty());
+    assertDenied(DenialReason.ACCOUNT_CONFLICT, login(identity));
   }
 
   @Test
@@ -270,16 +273,31 @@ public class CognitoUserLoginTest {
     Assume.assumeNotNull(defaultAdmin);
     var externalReferenceCode = defaultAdmin.getExternalReferenceCode();
 
-    Assert.assertTrue(login(identity(defaultAdmin.getEmailAddress(), ADMIN_GROUPS)).isEmpty());
+    assertDenied(
+        DenialReason.ACCOUNT_CONFLICT,
+        login(identity(defaultAdmin.getEmailAddress(), ADMIN_GROUPS)));
     Assert.assertEquals(
         externalReferenceCode,
         userLocalService.getUser(defaultAdmin.getUserId()).getExternalReferenceCode());
   }
 
-  private Optional<User> login(OidcIdentity identity) throws Exception {
-    var user = cognitoUserLogin.login(companyId, identity);
-    user.ifPresent(u -> userIds.add(u.getUserId()));
-    return user;
+  private LoginResult login(OidcIdentity identity) throws Exception {
+    var result = cognitoUserLogin.login(companyId, identity);
+    if (result instanceof Allowed(var user)) {
+      userIds.add(user.getUserId());
+    }
+    return result;
+  }
+
+  private User loginAllowed(OidcIdentity identity) throws Exception {
+    if (login(identity) instanceof Allowed(var user)) {
+      return user;
+    }
+    throw new AssertionError("Cognito user " + identity.sub() + " was not logged in");
+  }
+
+  private static void assertDenied(DenialReason reason, LoginResult result) {
+    Assert.assertEquals(new Denied(reason), result);
   }
 
   private User addUnlinkedUser() throws Exception {

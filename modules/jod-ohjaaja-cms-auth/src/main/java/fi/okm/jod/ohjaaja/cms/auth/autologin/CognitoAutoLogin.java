@@ -19,6 +19,9 @@ import fi.okm.jod.ohjaaja.cms.auth.configuration.CognitoAutoLoginConfiguration;
 import fi.okm.jod.ohjaaja.cms.auth.configuration.CognitoAutoLoginConfigurationUtil;
 import fi.okm.jod.ohjaaja.cms.auth.jwt.OidcTokenVerifier;
 import fi.okm.jod.ohjaaja.cms.auth.user.CognitoUserLogin;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Allowed;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.DenialReason;
+import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Denied;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
@@ -33,6 +36,10 @@ import org.osgi.service.component.annotations.Reference;
  * <p>Both OIDC headers are verified before they are trusted. Resolving the Liferay user and its
  * roles is delegated to {@link CognitoUserLogin}. The Cognito subject of the login is handed to
  * {@link CognitoSessionFilter}, which binds it to the Liferay session.
+ *
+ * <p>A verified identity that is not allowed to log in is redirected to {@link
+ * AccessDeniedServlet}. Otherwise the user would end up on the Liferay login page, which cannot be
+ * used while the ALB authenticates the requests.
  */
 @Component(configurationPid = CognitoAutoLoginConfiguration.PID, service = AutoLogin.class)
 public class CognitoAutoLogin extends BaseAutoLogin {
@@ -81,16 +88,43 @@ public class CognitoAutoLogin extends BaseAutoLogin {
     if (identity == null) {
       return null;
     }
-    var user =
-        cognitoUserLogin.login(portal.getCompanyId(httpServletRequest), identity).orElse(null);
-    if (user == null) {
+    return switch (cognitoUserLogin.login(portal.getCompanyId(httpServletRequest), identity)) {
+      case Allowed(var user) -> {
+        // Liferay renews the session after the AutoLogin, so the subject cannot be stored in the
+        // session here
+        httpServletRequest.setAttribute(LOGIN_SUBJECT_ATTRIBUTE, identity.sub());
+        yield new String[] {
+          String.valueOf(user.getUserId()), user.getPassword(), Boolean.TRUE.toString()
+        };
+      }
+      case Denied(var reason) -> {
+        var redirect = getAccessDeniedRedirect(httpServletRequest, portal.getPathModule(), reason);
+        if (redirect != null) {
+          httpServletRequest.setAttribute(AUTO_LOGIN_REDIRECT, redirect);
+        }
+        yield null;
+      }
+    };
+  }
+
+  /**
+   * Returns the URL of the access denied page, or null when the request must not be redirected.
+   * Only page loads are redirected, and never the access denied page itself.
+   */
+  static String getAccessDeniedRedirect(
+      HttpServletRequest httpServletRequest, String pathModule, DenialReason reason) {
+    var method = httpServletRequest.getMethod();
+    if (!"GET".equals(method) && !"HEAD".equals(method)) {
       return null;
     }
-    // Liferay renews the session after the AutoLogin, so the subject cannot be stored in the
-    // session here
-    httpServletRequest.setAttribute(LOGIN_SUBJECT_ATTRIBUTE, identity.sub());
-    return new String[] {
-      String.valueOf(user.getUserId()), user.getPassword(), Boolean.TRUE.toString()
-    };
+    var accessDeniedPath = pathModule + AccessDeniedServlet.PATH;
+    if (accessDeniedPath.equals(httpServletRequest.getRequestURI())) {
+      return null;
+    }
+    return accessDeniedPath
+        + "?"
+        + AccessDeniedServlet.REASON_PARAMETER
+        + "="
+        + AccessDeniedServlet.toParameterValue(reason);
   }
 }
