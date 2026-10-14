@@ -1,0 +1,4 @@
+Bundle-Name: jod-ohjaaja-cms-sitemap
+Bundle-SymbolicName: fi.okm.jod.ohjaaja.cms.sitemap
+Bundle-Version: 1.0.0
+Export-Package: fi.okm.jod.ohjaaja.cms.sitemap.service, fi.okm.jod.ohjaaja.cms.sitemap.model

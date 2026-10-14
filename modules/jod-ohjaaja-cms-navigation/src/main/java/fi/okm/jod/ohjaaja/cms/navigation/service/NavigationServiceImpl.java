@@ -22,12 +22,10 @@ import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
-import com.liferay.portal.kernel.model.ClassedModel;
 import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.auth.PrincipalThreadLocal;
 import com.liferay.portal.kernel.security.permission.ActionKeys;
-import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.security.permission.ResourceActionsUtil;
 import com.liferay.portal.kernel.security.permission.resource.ModelResourcePermission;
 import com.liferay.portal.kernel.service.ResourcePermissionLocalServiceUtil;
@@ -55,6 +53,8 @@ import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistence
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.util.AdminUtil;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import fi.okm.jod.ohjaaja.cms.util.PermissionUtil;
+import fi.okm.jod.ohjaaja.cms.util.SlugUtil;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
@@ -303,6 +303,8 @@ public class NavigationServiceImpl implements NavigationService {
         siteNavigationMenuItem.getSiteNavigationMenuItemId(),
         name,
         nameI18n,
+        SlugUtil.sluggify(name),
+        SlugUtil.sluggifyAll(nameI18n),
         description,
         descriptionI18n,
         getType(siteNavigationMenuItem, type),
@@ -379,7 +381,9 @@ public class NavigationServiceImpl implements NavigationService {
           assetCategoryLocalService.fetchAssetCategoryByExternalReferenceCode(
               externalReferenceCode, groupId);
     }
-    return canView(assetCategoryModelResourcePermission, assetCategory) ? assetCategory : null;
+    return PermissionUtil.canView(assetCategoryModelResourcePermission, assetCategory)
+        ? assetCategory
+        : null;
   }
 
   // Only the latest approved version is shown: a newer draft must not hide a published article
@@ -403,20 +407,9 @@ public class NavigationServiceImpl implements NavigationService {
           journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
               groupId, externalReferenceCode, WorkflowConstants.STATUS_APPROVED, true);
     }
-    return canView(journalArticleModelResourcePermission, journalArticle) ? journalArticle : null;
-  }
-
-  private static <T extends ClassedModel> boolean canView(
-      ModelResourcePermission<T> modelResourcePermission, T model) {
-    var permissionChecker = PermissionThreadLocal.getPermissionChecker();
-    if (model == null || permissionChecker == null) {
-      return false;
-    }
-    try {
-      return modelResourcePermission.contains(permissionChecker, model, ActionKeys.VIEW);
-    } catch (PortalException e) {
-      return false;
-    }
+    return PermissionUtil.canView(journalArticleModelResourcePermission, journalArticle)
+        ? journalArticle
+        : null;
   }
 
   private String getName(
