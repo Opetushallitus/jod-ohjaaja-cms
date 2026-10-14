@@ -8,6 +8,14 @@ subprojects { subproject ->
   subproject.pluginManager.withPlugin('java') {
     subproject.apply plugin: 'com.diffplug.spotless'
     subproject.apply from: rootProject.file('gradle/jod.spotless.gradle')
+
+    // Liferay DXP 2026.Q2 runs on Java 21. Bundles compiled with a newer JDK get osgi.ee=UNKNOWN
+    // and fail to resolve, whatever JDK runs Gradle.
+    subproject.java {
+      toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+      }
+    }
   }
 }
 

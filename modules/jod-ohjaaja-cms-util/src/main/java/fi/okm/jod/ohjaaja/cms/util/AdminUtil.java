@@ -15,9 +15,6 @@ import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.model.role.RoleConstants;
-import com.liferay.portal.kernel.security.auth.PrincipalThreadLocal;
-import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
-import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import java.util.List;
@@ -48,17 +45,11 @@ public final class AdminUtil {
    */
   public static <E extends Throwable> void runAsAdmin(long companyId, UnsafeRunnable<E> runnable)
       throws E, PortalException {
-    var user = getAdminUser(companyId);
-    var originalName = PrincipalThreadLocal.getName();
-    var originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-
-    try {
-      PrincipalThreadLocal.setName(user.getUserId());
-      PermissionThreadLocal.setPermissionChecker(PermissionCheckerFactoryUtil.create(user));
-      runnable.run();
-    } finally {
-      PrincipalThreadLocal.setName(originalName);
-      PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-    }
+    RunAsUtil.callAs(
+        getAdminUser(companyId),
+        () -> {
+          runnable.run();
+          return null;
+        });
   }
 }
