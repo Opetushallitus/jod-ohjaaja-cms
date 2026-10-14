@@ -21,7 +21,12 @@ import com.liferay.journal.model.JournalArticle;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.ResourceConstants;
+import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
+import com.liferay.portal.kernel.security.permission.ActionKeys;
+import com.liferay.portal.kernel.service.ResourcePermissionLocalService;
+import com.liferay.portal.kernel.service.RoleLocalService;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.Portal;
@@ -57,6 +62,10 @@ public class JodOhjaajaCmsTagsDtoConverter
   @Reference private AssetVocabularyLocalService assetVocabularyLocalService;
 
   @Reference private Portal portal;
+
+  @Reference private ResourcePermissionLocalService resourcePermissionLocalService;
+
+  @Reference private RoleLocalService roleLocalService;
 
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
@@ -174,5 +183,53 @@ public class JodOhjaajaCmsTagsDtoConverter
             + JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE
             + ": "
             + tagVocabulary.getName());
+
+    grantGuestViewPermission(tagVocabulary);
+  }
+
+  /**
+   * The guest needs the view permission on the vocabulary to view its tags. Granted also to an
+   * existing vocabulary, which was created without it.
+   */
+  private void grantGuestViewPermission(AssetVocabulary tagVocabulary) {
+    try {
+      var guestRole = roleLocalService.getRole(tagVocabulary.getCompanyId(), RoleConstants.GUEST);
+      var primKey = String.valueOf(tagVocabulary.getVocabularyId());
+      // hasResourcePermission would throw if the guest has no permissions on the vocabulary
+      var resourcePermission =
+          resourcePermissionLocalService.fetchResourcePermission(
+              tagVocabulary.getCompanyId(),
+              AssetVocabulary.class.getName(),
+              ResourceConstants.SCOPE_INDIVIDUAL,
+              primKey,
+              guestRole.getRoleId());
+      if (resourcePermission != null && resourcePermission.hasActionId(ActionKeys.VIEW)) {
+        return;
+      }
+      if (resourcePermission == null) {
+        resourcePermissionLocalService.setResourcePermissions(
+            tagVocabulary.getCompanyId(),
+            AssetVocabulary.class.getName(),
+            ResourceConstants.SCOPE_INDIVIDUAL,
+            primKey,
+            guestRole.getRoleId(),
+            new String[] {ActionKeys.VIEW});
+      } else {
+        // Adds the action to the existing ones, which it can do only to an existing permission
+        resourcePermissionLocalService.addResourcePermission(
+            tagVocabulary.getCompanyId(),
+            AssetVocabulary.class.getName(),
+            ResourceConstants.SCOPE_INDIVIDUAL,
+            primKey,
+            guestRole.getRoleId(),
+            ActionKeys.VIEW);
+      }
+      log.info("Granted the guest the view permission on the tag vocabulary");
+    } catch (PortalException e) {
+      throw new TagsServiceException(
+          "Failed to grant the guest the view permission on the tag vocabulary "
+              + JOD_TAG_VOCABULARY_EXTERNAL_REFERENCE_CODE,
+          e);
+    }
   }
 }
