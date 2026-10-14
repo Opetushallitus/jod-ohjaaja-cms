@@ -1,3 +1,9 @@
 dependencies {
   compileOnly libs.liferay.dxp.api
+
+  testImplementation libs.junit
+}
+
+test {
+  useJUnit()
 }

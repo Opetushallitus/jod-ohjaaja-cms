@@ -51,6 +51,10 @@ public class PublicAccessPolicyInitializer {
               "fi.okm.jod.ohjaaja.cms.navigation.rest.application.NavigationRestApplication#*",
               "Public access JOD OHJAAJA NAVIGATION"),
           new Policy(
+              "JOD_OHJAAJA_SITEMAP",
+              "fi.okm.jod.ohjaaja.cms.sitemap.rest.application.SitemapRestApplication#*",
+              "Public access JOD OHJAAJA SITEMAP"),
+          new Policy(
               "JOD_OHJAAJA_TAGS",
               "fi.okm.jod.ohjaaja.cms.tags.rest.application.TagsRestApplication#*",
               "Public access JOD OHJAAJA TAGS"));

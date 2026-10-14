@@ -9,6 +9,13 @@
 
 package fi.okm.jod.ohjaaja.cms.tags.test;
 
+import com.liferay.asset.kernel.model.AssetVocabulary;
+import com.liferay.asset.kernel.service.AssetVocabularyLocalService;
+import com.liferay.portal.kernel.model.ResourceConstants;
+import com.liferay.portal.kernel.model.role.RoleConstants;
+import com.liferay.portal.kernel.security.permission.ActionKeys;
+import com.liferay.portal.kernel.service.ResourcePermissionLocalService;
+import com.liferay.portal.kernel.service.RoleLocalService;
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
@@ -67,6 +74,35 @@ public class TagsServiceTest {
     if (serviceReference != null && bundleContext != null) {
       bundleContext.ungetService(serviceReference);
     }
+  }
+
+  @Test
+  public void shouldGrantGuestViewPermissionOnTagVocabulary() throws Exception {
+    // A guest can view a tag only if it can view the vocabulary
+    var tagVocabulary =
+        bundleContext
+            .getService(bundleContext.getServiceReference(AssetVocabularyLocalService.class))
+            .getAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID);
+    var guestRole =
+        bundleContext
+            .getService(bundleContext.getServiceReference(RoleLocalService.class))
+            .getRole(tagVocabulary.getCompanyId(), RoleConstants.GUEST);
+
+    var resourcePermission =
+        bundleContext
+            .getService(bundleContext.getServiceReference(ResourcePermissionLocalService.class))
+            .fetchResourcePermission(
+                tagVocabulary.getCompanyId(),
+                AssetVocabulary.class.getName(),
+                ResourceConstants.SCOPE_INDIVIDUAL,
+                String.valueOf(tagVocabulary.getVocabularyId()),
+                guestRole.getRoleId());
+
+    Assert.assertNotNull(
+        "The guest should have permissions on the tag vocabulary", resourcePermission);
+    Assert.assertTrue(
+        "The guest should be able to view the tag vocabulary",
+        resourcePermission.hasActionId(ActionKeys.VIEW));
   }
 
   @Test

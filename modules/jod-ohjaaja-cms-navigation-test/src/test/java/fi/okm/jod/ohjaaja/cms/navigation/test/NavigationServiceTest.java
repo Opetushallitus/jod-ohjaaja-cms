@@ -306,8 +306,12 @@ public class NavigationServiceTest {
       Assert.assertEquals(Long.valueOf(article.getResourcePrimKey()), resolved.articleId());
       Assert.assertEquals(article.getExternalReferenceCode(), resolved.externalReferenceCode());
       Assert.assertEquals("Navigation test article", resolved.name());
+      Assert.assertEquals("navigation-test-article", resolved.slug());
+      Assert.assertEquals("navigation-test-article", resolved.slug_i18n().get("en-US"));
       Assert.assertNull(broken.articleId());
       Assert.assertEquals("Broken item", broken.name());
+      Assert.assertEquals("broken-item", broken.slug());
+      Assert.assertTrue(broken.slug_i18n().isEmpty());
 
       // A newer draft must not replace the published version in the menu
       var draftServiceContext = ServiceContextTestUtil.getServiceContext(TEST_GROUP_ID, userId);
