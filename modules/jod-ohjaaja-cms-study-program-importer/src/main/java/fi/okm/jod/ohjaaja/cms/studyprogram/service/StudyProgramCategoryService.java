@@ -29,6 +29,7 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstan
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import java.util.Arrays;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -69,6 +70,16 @@ public class StudyProgramCategoryService {
           getStudyProgramCategory().getCategoryId(),
           getStudyProgramParentCategory().getCategoryId()
         };
+
+    var currentCategoryIds =
+        assetCategoryLocalService.getCategoryIds(
+            JournalArticle.class.getName(), article.getResourcePrimKey());
+    Arrays.sort(categoryIds);
+    Arrays.sort(currentCategoryIds);
+    if (Arrays.equals(categoryIds, currentCategoryIds)) {
+      // Updating unchanged categories would only write and reindex the asset on every import
+      return;
+    }
 
     journalArticleLocalService.updateAsset(userId, article, categoryIds, null, null, 0.0);
   }

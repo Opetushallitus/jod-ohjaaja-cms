@@ -13,22 +13,23 @@ import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporter
 
 import com.liferay.document.library.kernel.model.DLVersionNumberIncrease;
 import com.liferay.document.library.kernel.service.DLAppLocalService;
+import com.liferay.document.library.kernel.service.DLFileEntryLocalService;
+import com.liferay.document.library.kernel.service.DLTrashLocalService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.repository.model.FileEntry;
 import com.liferay.portal.kernel.repository.model.Folder;
 import com.liferay.portal.kernel.service.ServiceContext;
-import com.liferay.portal.kernel.util.HttpUtil;
 import com.liferay.portal.kernel.util.MimeTypesUtil;
 import com.liferay.portal.kernel.util.StringUtil;
+import fi.okm.jod.ohjaaja.cms.studyprogram.client.StudyProgramImageClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.exception.StudyProgramImageFolderDeleteException;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.nio.file.Paths;
+import java.util.Arrays;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -36,44 +37,72 @@ import org.osgi.service.component.annotations.Reference;
 public class StudyProgramFileService {
   private static final Log log = LogFactoryUtil.getLog(StudyProgramFileService.class);
   @Reference private DLAppLocalService dlAppLocalService;
+  @Reference private DLFileEntryLocalService dlFileEntryLocalService;
+  @Reference private DLTrashLocalService dlTrashLocalService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Reference private StudyProgramImageClient studyProgramImageClient;
 
-  public FileEntry getStudyProgramImage(String imageUrl, String oid, long userId) {
-
-    String fileName;
+  /**
+   * Downloads the image of a study program and stores it under the oid of the study program.
+   *
+   * @return the image, or null if it could not be imported
+   * @throws InterruptedException if the download is interrupted, so that the import stops instead
+   *     of updating the article without its image
+   */
+  public FileEntry getStudyProgramImage(String imageUrl, String oid, long userId)
+      throws InterruptedException {
     try {
-      var uri = new URI(imageUrl);
-      fileName = Paths.get(uri.getPath()).getFileName().toString();
-    } catch (Exception e) {
-      fileName = "studyprogram-" + oid + ".jpg";
-    }
-
-    try {
-      var bytes = HttpUtil.URLtoByteArray(imageUrl);
-
-      return getOrCreateFileEntryByExternalReferenceCode(oid, fileName, bytes, userId);
-
-    } catch (Exception e) {
+      var image = studyProgramImageClient.downloadImage(imageUrl);
+      return getOrCreateFileEntryByExternalReferenceCode(
+          oid, getImageFileName(oid, image.extension()), image.bytes(), userId);
+    } catch (IOException | RuntimeException e) {
       log.error("Failed to fetch or store image from URL: " + imageUrl, e);
+      return null;
     }
-
-    return null;
   }
 
+  private static String getImageFileName(String oid, String extension) {
+    return "studyprogram-" + oid + "." + extension;
+  }
+
+  /**
+   * @return the image with the given UUID, or null if it has been deleted or moved to the Recycle
+   *     Bin
+   */
+  public FileEntry findImage(String uuid, long groupId) {
+    try {
+      var fileEntry = dlAppLocalService.getFileEntryByUuidAndGroupId(uuid, groupId);
+      return isInTrash(fileEntry) ? null : fileEntry;
+    } catch (PortalException e) {
+      log.info("Image " + uuid + " not found: " + e.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * @return the placeholder image, or if it could not be imported, the one from an earlier import,
+   *     or null if there is none
+   */
   public FileEntry getStudyProgramImagePlaceholder(long userId) {
 
     try {
       var bytes =
           readImageBytes(StudyProgramImporterConstants.STUDY_PROGRAM_PLACEHOLDER_IMAGE_PATH);
-      return getOrCreateFileEntryByExternalReferenceCode(
-          STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC,
-          STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME,
-          bytes,
-          userId);
+      var placeholder =
+          getOrCreateFileEntryByExternalReferenceCode(
+              STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC,
+              STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME,
+              bytes,
+              userId);
+      if (placeholder != null) {
+        return placeholder;
+      }
     } catch (IOException e) {
       log.error("Failed to read placeholder image from resources", e);
-      return null;
     }
+    // The placeholder from an earlier import is shown until the placeholder can be imported again
+    var earlierPlaceholder = findExistingFileEntry(STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC);
+    return earlierPlaceholder == null || isInTrash(earlierPlaceholder) ? null : earlierPlaceholder;
   }
 
   public FileEntry getOrCreateFileEntryByExternalReferenceCode(
@@ -84,12 +113,28 @@ public class StudyProgramFileService {
       var serviceContext = new ServiceContext();
       serviceContext.setScopeGroupId(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
       serviceContext.setUserId(userId);
-      serviceContext.setAddGuestPermissions(true);
+      serviceContext.setAddGroupPermissions(true);
       serviceContext.setAddGuestPermissions(true);
 
       FileEntry fileEntry = findExistingFileEntry(externalReferenceCode);
+      if (fileEntry != null && isInTrash(fileEntry)) {
+        // The file keeps its external reference code in the Recycle Bin, so it is restored instead
+        // of adding a new file. Unlike deleting it, this does not lose the file if storing the new
+        // content fails.
+        fileEntry =
+            dlTrashLocalService.moveFileEntryFromTrash(
+                userId,
+                fileEntry.getRepositoryId(),
+                fileEntry.getFileEntryId(),
+                folderId,
+                serviceContext);
+        log.info("Restored image " + fileEntry.getFileName() + " from the Recycle Bin");
+      }
 
-      if (fileEntry != null) {
+      if (fileEntry != null && isSameFile(fileEntry, fileName, bytes)) {
+        // Updating an unchanged file would only add a new version of it
+        return fileEntry;
+      } else if (fileEntry != null) {
         // If file entry already exists, update it
         fileEntry =
             dlAppLocalService.updateFileEntry(
@@ -136,15 +181,35 @@ public class StudyProgramFileService {
     return null;
   }
 
+  /**
+   * @return false also if the content of the file entry cannot be read, so that it is overwritten
+   */
+  private boolean isSameFile(FileEntry fileEntry, String fileName, byte[] bytes) {
+    if (!fileName.equals(fileEntry.getFileName()) || fileEntry.getSize() != bytes.length) {
+      return false;
+    }
+    // FileEntry.getContentStream() would increment the view count of the file
+    try (var inputStream =
+        dlFileEntryLocalService.getFileAsStream(
+            fileEntry.getFileEntryId(), fileEntry.getVersion(), false)) {
+      return Arrays.equals(inputStream.readAllBytes(), bytes);
+    } catch (PortalException | IOException e) {
+      log.warn("Failed to read image " + fileName + ". Overwriting it.", e);
+      return false;
+    }
+  }
+
+  private static boolean isInTrash(FileEntry fileEntry) {
+    return fileEntry.isInTrash() || fileEntry.isInTrashContainer();
+  }
+
   private FileEntry findExistingFileEntry(String externalReferenceCode) {
     try {
       return dlAppLocalService.getFileEntryByExternalReferenceCode(
           externalReferenceCode, jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
     } catch (PortalException e) {
       log.info(
-          "No existing file entry found for external reference code: "
-              + externalReferenceCode
-              + ". Creating a new one.");
+          "No existing file entry found for external reference code: " + externalReferenceCode);
       return null;
     }
   }

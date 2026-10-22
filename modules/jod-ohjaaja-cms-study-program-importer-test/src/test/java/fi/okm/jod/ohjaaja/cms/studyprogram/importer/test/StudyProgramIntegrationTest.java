@@ -121,4 +121,22 @@ public class StudyProgramIntegrationTest {
 
     System.out.println("✅ DDM Structure definition length: " + definition.length());
   }
+
+  @Test
+  public void shouldIncludeLinkFieldSetInDefinitions() {
+    DDMStructure structure = studyProgramStructureService.getOrCreateDDMStructure(true);
+    Assert.assertNotNull("Structure should not be null", structure);
+
+    var definitions = studyProgramStructureService.getDefinitions(structure);
+
+    Assert.assertEquals(
+        "The definitions should be those of the structure and its link field set",
+        2,
+        definitions.size());
+    Assert.assertEquals(structure.getDefinition(), definitions.getFirst());
+    Assert.assertTrue(
+        "The field set should define the link URL", definitions.get(1).contains("\"linkurl\""));
+
+    System.out.println("✅ DDM Structure uses " + (definitions.size() - 1) + " field set");
+  }
 }

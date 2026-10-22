@@ -50,4 +50,7 @@ public final class StudyProgramImporterConstants {
       "/images/" + STUDY_PROGRAM_PLACEHOLDER_IMAGE_FILE_NAME;
   public static final String STUDY_PROGRAM_PLACEHOLDER_IMAGE_ERC =
       "study_program_image_placeholder";
+  public static final String STUDY_PROGRAM_FINGERPRINT_FIELD_NAME = "studyProgramFingerprint";
+
+  public static final String KONFO_URL_PROPERTY = "konfo.url";
 }
