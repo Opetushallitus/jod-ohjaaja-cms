@@ -25,10 +25,31 @@ public record StudyProgramDto(
     Integer opintojenLaajuusNumero,
     Laajuusyksikko opintojenLaajuusyksikko) {
 
+  public String getNimi(String language) {
+    return getText(nimi, language);
+  }
+
   public String getKuvaus(String language) {
-    if (kuvaus == null || kuvaus.isEmpty()) {
+    return getText(kuvaus, language);
+  }
+
+  /**
+   * @return the text in the given language, or in Finnish if there is none, or an empty string if
+   *     there is neither. A language can also be missing by having a null text.
+   */
+  private static String getText(Map<String, String> texts, String language) {
+    if (texts == null) {
       return "";
     }
-    return kuvaus.getOrDefault(language, kuvaus.getOrDefault("fi", ""));
+    var text = texts.get(language);
+    if (text == null) {
+      text = texts.get("fi");
+    }
+    return text == null ? "" : text;
+  }
+
+  public String getTeemakuvaUrl() {
+    var url = teemakuva == null ? "" : teemakuva.strip();
+    return url.isEmpty() || url.equals("null") ? null : url;
   }
 }

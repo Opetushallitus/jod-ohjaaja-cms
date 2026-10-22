@@ -88,55 +88,54 @@ public class NavigationServiceImpl implements NavigationService {
   private static final String HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME =
       "hideFromMainCategoryPageMostViewedCarousel";
 
-  private static final CustomFieldData[] CUSTOM_FIELDS =
-      new CustomFieldData[] {
-        new CustomFieldData(
-            TYPE_CUSTOM_FIELD_NAME,
-            ExpandoColumnConstants.STRING_ARRAY,
-            new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"},
-            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
-            Map.of(LANGUAGE_ID_FI_FI, "Tyyppi", LANGUAGE_ID_EN_US, "Type")),
-        new CustomFieldData(
-            HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
-            ExpandoColumnConstants.BOOLEAN,
-            false,
-            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                "Piilota uusien karusellista etusivulta",
-                LANGUAGE_ID_EN_US,
-                "Hide from the homepage new items carousel")),
-        new CustomFieldData(
-            HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
-            ExpandoColumnConstants.BOOLEAN,
-            false,
-            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                "Piilota suosittujen karusellista etusivulta",
-                LANGUAGE_ID_EN_US,
-                "Hide from the homepage most viewed carousel")),
-        new CustomFieldData(
-            HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
-            ExpandoColumnConstants.BOOLEAN,
-            false,
-            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                "Piilota uusien karusellista pääkategoriasivulta",
-                LANGUAGE_ID_EN_US,
-                "Hide from the main category page new items carousel")),
-        new CustomFieldData(
-            HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
-            ExpandoColumnConstants.BOOLEAN,
-            false,
-            ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                "Piilota suosittujen karusellista pääkategoriasivulta",
-                LANGUAGE_ID_EN_US,
-                "Hide from the main category page most viewed carousel"))
-      };
+  private static final CustomFieldData[] CUSTOM_FIELDS = {
+    new CustomFieldData(
+        TYPE_CUSTOM_FIELD_NAME,
+        ExpandoColumnConstants.STRING_ARRAY,
+        new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"},
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
+        Map.of(LANGUAGE_ID_FI_FI, "Tyyppi", LANGUAGE_ID_EN_US, "Type")),
+    new CustomFieldData(
+        HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
+        ExpandoColumnConstants.BOOLEAN,
+        false,
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+        Map.of(
+            LANGUAGE_ID_FI_FI,
+            "Piilota uusien karusellista etusivulta",
+            LANGUAGE_ID_EN_US,
+            "Hide from the homepage new items carousel")),
+    new CustomFieldData(
+        HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
+        ExpandoColumnConstants.BOOLEAN,
+        false,
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+        Map.of(
+            LANGUAGE_ID_FI_FI,
+            "Piilota suosittujen karusellista etusivulta",
+            LANGUAGE_ID_EN_US,
+            "Hide from the homepage most viewed carousel")),
+    new CustomFieldData(
+        HIDE_FROM_MAIN_CATEGORY_PAGE_NEWEST_CAROUSEL_FIELD_NAME,
+        ExpandoColumnConstants.BOOLEAN,
+        false,
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+        Map.of(
+            LANGUAGE_ID_FI_FI,
+            "Piilota uusien karusellista pääkategoriasivulta",
+            LANGUAGE_ID_EN_US,
+            "Hide from the main category page new items carousel")),
+    new CustomFieldData(
+        HIDE_FROM_MAIN_CATEGORY_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME,
+        ExpandoColumnConstants.BOOLEAN,
+        false,
+        ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_CHECKBOX,
+        Map.of(
+            LANGUAGE_ID_FI_FI,
+            "Piilota suosittujen karusellista pääkategoriasivulta",
+            LANGUAGE_ID_EN_US,
+            "Hide from the main category page most viewed carousel"))
+  };
 
   private static final Log log = LogFactoryUtil.getLog(NavigationServiceImpl.class);
 
@@ -179,28 +178,40 @@ public class NavigationServiceImpl implements NavigationService {
           MultipleStudyProgramListingMenuItemExpection,
           NavigationMenuItemPersistenceException {
     var studyProgramsParentMenuItem = getStudyProgramsParentMenuItem();
+    var groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
+    var typeSettings =
+        UnicodePropertiesBuilder.create(true)
+            .put("classNameId", String.valueOf(PortalUtil.getClassNameId(JournalArticle.class)))
+            .put(PROPERTY_CLASS_PK, String.valueOf(studyProgramJournalArticle.getResourcePrimKey()))
+            .put("classTypeId", String.valueOf(studyProgramJournalArticle.getDDMStructureId()))
+            .put(PROPERTY_TITLE, String.valueOf(studyProgramJournalArticle.getTitle()))
+            .put(
+                "type",
+                ResourceActionsUtil.getModelResource(
+                    LocaleUtil.getDefault(), JournalArticle.class.getName()))
+            .put("useCustomName", false)
+            .buildString();
+
+    var existingMenuItem =
+        siteNavigationMenuItemLocalService.fetchSiteNavigationMenuItemByExternalReferenceCode(
+            studyProgramJournalArticle.getExternalReferenceCode(), groupId);
+    if (existingMenuItem != null
+        && existingMenuItem.getParentSiteNavigationMenuItemId()
+            == studyProgramsParentMenuItem.getSiteNavigationMenuItemId()
+        && typeSettings.equals(existingMenuItem.getTypeSettings())) {
+      // Updating an unchanged menu item would only write it again on every import
+      return;
+    }
 
     try {
       siteNavigationMenuItemLocalService.addOrUpdateSiteNavigationMenuItem(
           studyProgramJournalArticle.getExternalReferenceCode(),
           serviceContext.getUserId(),
-          jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+          groupId,
           studyProgramsParentMenuItem.getSiteNavigationMenuId(),
           studyProgramsParentMenuItem.getSiteNavigationMenuItemId(),
           JournalArticle.class.getName(),
-          UnicodePropertiesBuilder.create(true)
-              .put("classNameId", String.valueOf(PortalUtil.getClassNameId(JournalArticle.class)))
-              .put(
-                  PROPERTY_CLASS_PK,
-                  String.valueOf(studyProgramJournalArticle.getResourcePrimKey()))
-              .put("classTypeId", String.valueOf(studyProgramJournalArticle.getDDMStructureId()))
-              .put(PROPERTY_TITLE, String.valueOf(studyProgramJournalArticle.getTitle()))
-              .put(
-                  "type",
-                  ResourceActionsUtil.getModelResource(
-                      LocaleUtil.getDefault(), JournalArticle.class.getName()))
-              .put("useCustomName", false)
-              .buildString(),
+          typeSettings,
           serviceContext);
     } catch (Exception e) {
       throw new NavigationMenuItemPersistenceException(
