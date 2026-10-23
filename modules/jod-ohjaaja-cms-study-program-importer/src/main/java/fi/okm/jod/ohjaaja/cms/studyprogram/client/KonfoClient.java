@@ -20,9 +20,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.List;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 
 @Component(service = KonfoClient.class)
 public class KonfoClient {
@@ -32,17 +32,20 @@ public class KonfoClient {
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
 
-  private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(30);
-  private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
   private static final String KONFO_API_STUDY_PROGRAMS_URL =
       PropsUtil.get("konfo.api.study.programs.url");
 
   public KonfoClient() {
-    this.httpClient = HttpClient.newBuilder().connectTimeout(CONNECTION_TIMEOUT).build();
+    this.httpClient = HttpClient.newBuilder().connectTimeout(KonfoHttp.CONNECTION_TIMEOUT).build();
     this.objectMapper =
         new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
             .findAndRegisterModules();
+  }
+
+  @Deactivate
+  protected void deactivate() {
+    httpClient.shutdownNow();
   }
 
   public List<StudyProgramDto> fetchStudyPrograms() throws IOException, InterruptedException {
@@ -50,13 +53,15 @@ public class KonfoClient {
     log.info("Fetching study programs from Konfo API: " + KONFO_API_STUDY_PROGRAMS_URL);
     HttpRequest request =
         HttpRequest.newBuilder()
-            .timeout(READ_TIMEOUT)
+            .timeout(KonfoHttp.READ_TIMEOUT)
             .uri(URI.create(KONFO_API_STUDY_PROGRAMS_URL))
             .header("Accept", "application/json")
             .GET()
             .build();
 
-    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response =
+        KonfoHttp.send(
+            httpClient, request, HttpResponse.BodyHandlers.ofString(), KonfoHttp.RESPONSE_TIMEOUT);
 
     if (response.statusCode() == 200) {
       KonfoResponse searchResponse = objectMapper.readValue(response.body(), KonfoResponse.class);

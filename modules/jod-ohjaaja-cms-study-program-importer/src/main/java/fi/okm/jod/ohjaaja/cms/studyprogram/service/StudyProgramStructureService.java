@@ -24,6 +24,7 @@ import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.util.GetterUtil;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.Validator;
@@ -88,6 +89,25 @@ public class StudyProgramStructureService {
       log.error("Failed to create or fetch DDM structure", e);
       return null;
     }
+  }
+
+  /**
+   * @return the definitions of the given structure and the field sets that it uses, which together
+   *     define the fields of its articles. The definition of the structure only refers to a field
+   *     set, so it does not change when the field set does.
+   */
+  public List<String> getDefinitions(DDMStructure structure) {
+    var definitions = new ArrayList<String>();
+    definitions.add(structure.getDefinition());
+    for (var field : structure.getDDMForm().getDDMFormFields()) {
+      // Liferay finds the fields of a field set by the same property
+      var fieldSetId = GetterUtil.getLong(field.getProperty("ddmStructureId"));
+      var fieldSet = fieldSetId > 0 ? ddmStructureLocalService.fetchDDMStructure(fieldSetId) : null;
+      if (fieldSet != null) {
+        definitions.add(fieldSet.getDefinition());
+      }
+    }
+    return definitions;
   }
 
   public void deleteDDMStructure() throws StudyProgramDDMStructureDeleteException {

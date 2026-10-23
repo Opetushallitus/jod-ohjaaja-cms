@@ -3,4 +3,10 @@ dependencies {
   compileOnly project(":modules:jod-ohjaaja-cms-navigation")
   compileOnly project(":modules:jod-ohjaaja-cms-tags")
   compileOnly project(":modules:jod-ohjaaja-cms-util")
+
+  testImplementation libs.junit
+}
+
+test {
+  useJUnit()
 }

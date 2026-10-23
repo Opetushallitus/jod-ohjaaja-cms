@@ -10,22 +10,14 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.background.task;
 
 import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.*;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.ENGLISH;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.FINNISH;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants.SWEDISH;
-import static fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramImporterUtil.*;
 import static fi.okm.jod.ohjaaja.cms.util.AdminUtil.getAdminUser;
 
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
-import com.liferay.dynamic.data.mapping.model.LocalizedValue;
-import com.liferay.dynamic.data.mapping.model.UnlocalizedValue;
-import com.liferay.dynamic.data.mapping.storage.DDMFormFieldValue;
-import com.liferay.dynamic.data.mapping.storage.DDMFormValues;
 import com.liferay.dynamic.data.mapping.util.DDM;
+import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.model.JournalArticleModel;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.journal.util.JournalConverter;
-import com.liferay.petra.string.StringPool;
 import com.liferay.portal.background.task.service.BackgroundTaskLocalServiceUtil;
 import com.liferay.portal.kernel.backgroundtask.*;
 import com.liferay.portal.kernel.backgroundtask.constants.BackgroundTaskConstants;
@@ -33,23 +25,28 @@ import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.User;
+import com.liferay.portal.kernel.repository.model.FileEntry;
 import com.liferay.portal.kernel.service.ServiceContext;
-import com.liferay.portal.kernel.util.HtmlUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
+import com.liferay.portal.kernel.util.PropsUtil;
 import com.liferay.portal.kernel.util.Validator;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.dto.StudyProgramDto;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService.ArticleState;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramImageService;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramImageService.ArticleImage;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
+import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramArticleFields;
+import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramArticleValues;
+import fi.okm.jod.ohjaaja.cms.studyprogram.util.StudyProgramFingerprint;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import jakarta.validation.ValidationException;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -64,14 +61,13 @@ public class ImportStudyProgramsBackgroundTaskExecutor
   private static final Log log =
       LogFactoryUtil.getLog(ImportStudyProgramsBackgroundTaskExecutor.class);
 
-  private static final Pattern SENTENCE_PATTERN = Pattern.compile("[^.!?]*+[.!?]");
-  private static final Pattern WORD_PATTERN = Pattern.compile("\\S++");
-
   @Reference private DDM ddm;
   @Reference private JournalConverter journalConverter;
   @Reference private KonfoClient konfoClient;
   @Reference private StudyProgramService studyProgramImporter;
   @Reference private StudyProgramFileService studyProgramFileService;
+  @Reference private StudyProgramImageService studyProgramImageService;
+  @Reference private StudyProgramFingerprintService studyProgramFingerprintService;
   @Reference private StudyProgramStructureService studyProgramStructureService;
   @Reference private StudyProgramCategoryService studyProgramCategoryService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
@@ -90,84 +86,94 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
     status.setAttribute("phase", "studyprogram.importing");
     status.setAttribute("progress", 0);
+
+    var konfoUrl = getKonfoUrl();
+    if (konfoUrl == null) {
+      log.error("Property " + KONFO_URL_PROPERTY + " is not set");
+      return new BackgroundTaskResult(
+          BackgroundTaskConstants.STATUS_FAILED, "Property " + KONFO_URL_PROPERTY + " is not set.");
+    }
     var structure = studyProgramStructureService.getOrCreateDDMStructure(true);
     if (structure == null) {
       log.error(
           "DDM structure with external reference code "
               + EXTERNAL_REFERENCE_CODE
               + " not found in group "
-              + jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
+              + getGroupId());
       return new BackgroundTaskResult(
           BackgroundTaskConstants.STATUS_FAILED, "Failed to fetch or create DDM structure.");
     }
 
     // Ensure the navigation menu item exists
     navigationService.getStudyProgramsParentMenuItem();
+    studyProgramFingerprintService.initFingerprintField();
 
     var studyPrograms = konfoClient.fetchStudyPrograms();
-    var user = getAdminUser(PortalUtil.getDefaultCompanyId());
-    var serviceContext = getServiceContext(jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
+    var context = createImportContext(backgroundTask, konfoUrl, structure);
     var currentStudyProgramArticleExternalReferenceCodes =
         studyProgramImporter.getImportedStudyPrograms().stream()
             .map(JournalArticleModel::getExternalReferenceCode)
             .toList();
-    // Set of oids that will be present after this run. importStudyProgram() catches and
-    // logs all exceptions, so every incoming program is considered "kept" regardless of
-    // per-item outcome
-    var importedStudyProgramOids =
-        studyPrograms.stream().map(StudyProgramDto::oid).collect(Collectors.toSet());
 
     for (int i = 0; i < studyPrograms.size(); i++) {
-
       if (Thread.interrupted()) {
         throw new InterruptedException("Background task interrupted");
       }
-
-      // Optionally check if task is being removed externally
-      var task =
-          BackgroundTaskLocalServiceUtil.fetchBackgroundTask(backgroundTask.getBackgroundTaskId());
-      if (task == null || task.getStatus() == BackgroundTaskConstants.STATUS_CANCELLED) {
+      if (isRemovedOrCancelled(backgroundTask)) {
         return BackgroundTaskResult.SUCCESS;
       }
 
-      var studyProgram = studyPrograms.get(i);
-
-      importStudyProgram(studyProgram, structure, user, backgroundTask, serviceContext);
+      importStudyProgram(studyPrograms.get(i), context);
 
       status.setAttribute("progress", (i + 1) * 100 / studyPrograms.size());
     }
 
+    // importStudyProgram() catches and logs all exceptions, so every incoming program is kept
+    // regardless of per-item outcome
+    var importedStudyProgramOids =
+        studyPrograms.stream().map(StudyProgramDto::oid).collect(Collectors.toSet());
     currentStudyProgramArticleExternalReferenceCodes.stream()
         .filter(externalReferenceCode -> !importedStudyProgramOids.contains(externalReferenceCode))
         .forEach(
-            externalReferenceCode -> {
-              try {
-                var journalArticle =
-                    journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
-                        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
-                        externalReferenceCode);
-                if (journalArticle != null) {
-                  navigationService.deleteStudyProgramNavigationMenuItem(externalReferenceCode);
-                  journalArticleLocalService.deleteArticle(
-                      jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
-                      journalArticle.getArticleId(),
-                      serviceContext);
-                  log.info("Deleted study program: " + externalReferenceCode);
-                }
-              } catch (PortalException e) {
-                log.error("Failed to delete study program: " + externalReferenceCode, e);
-              }
-            });
+            externalReferenceCode ->
+                deleteStudyProgram(externalReferenceCode, context.serviceContext()));
 
     return BackgroundTaskResult.SUCCESS;
   }
 
-  private void importStudyProgram(
-      StudyProgramDto studyProgram,
-      DDMStructure structure,
-      User user,
-      BackgroundTask task,
-      ServiceContext serviceContext) {
+  /**
+   * @return the URL of the Konfo that the articles link to, without a trailing slash, since the
+   *     links are built by appending paths to it, or null if it is not set
+   */
+  private static String getKonfoUrl() {
+    var konfoUrl = PropsUtil.get(KONFO_URL_PROPERTY);
+    return Validator.isBlank(konfoUrl) ? null : konfoUrl.strip().replaceFirst("/+$", "");
+  }
+
+  private ImportContext createImportContext(
+      BackgroundTask backgroundTask, String konfoUrl, DDMStructure structure)
+      throws PortalException {
+    var user = getAdminUser(PortalUtil.getDefaultCompanyId());
+    return new ImportContext(
+        backgroundTask,
+        konfoUrl,
+        structure,
+        studyProgramStructureService.getDefinitions(structure),
+        // The articles that use the placeholder share it, so a changed placeholder is updated here
+        // instead of only when some of those articles is updated
+        studyProgramFileService.getStudyProgramImagePlaceholder(user.getUserId()),
+        user,
+        getServiceContext(getGroupId()));
+  }
+
+  private static boolean isRemovedOrCancelled(BackgroundTask backgroundTask) {
+    var task =
+        BackgroundTaskLocalServiceUtil.fetchBackgroundTask(backgroundTask.getBackgroundTaskId());
+    return task == null || task.getStatus() == BackgroundTaskConstants.STATUS_CANCELLED;
+  }
+
+  private void importStudyProgram(StudyProgramDto studyProgram, ImportContext context)
+      throws InterruptedException {
     try {
       if (studyProgram.kuvaus() == null || studyProgram.nimi() == null) {
         throw new ValidationException("Kuvaus or Nimi is null.");
@@ -175,186 +181,152 @@ public class ImportStudyProgramsBackgroundTaskExecutor
 
       var journalArticle =
           journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
-              jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(), studyProgram.oid());
+              getGroupId(), studyProgram.oid());
 
-      var titleMap =
-          Map.of(
-              FINNISH,
-              studyProgram.nimi().getOrDefault("fi", ""),
-              ENGLISH,
-              studyProgram.nimi().getOrDefault("en", studyProgram.nimi().getOrDefault("fi", "")),
-              SWEDISH,
-              studyProgram.nimi().getOrDefault("sv", studyProgram.nimi().getOrDefault("fi", "")));
+      var values = StudyProgramArticleValues.of(studyProgram, context.konfoUrl());
+      var fingerprint = StudyProgramFingerprint.calculate(values, context.structureDefinitions());
+      var articleState =
+          journalArticle == null
+              ? ArticleState.OUTDATED
+              : studyProgramFingerprintService.getArticleState(journalArticle, fingerprint);
 
-      var content = getContent(structure, studyProgram, titleMap, user.getUserId());
-
-      if (journalArticle != null) {
-        log.info("Study program already imported: " + studyProgram.oid() + ". Updating article.");
-
-        journalArticleLocalService.updateArticle(
-            journalArticle.getUserId(),
-            journalArticle.getGroupId(),
-            journalArticle.getFolderId(),
-            journalArticle.getArticleId(),
-            journalArticle.getVersion(),
-            titleMap,
-            journalArticle.getDescriptionMap(),
-            content,
-            journalArticle.getLayoutUuid(),
-            serviceContext);
-
+      var image = getArticleImage(values, journalArticle, articleState, context);
+      // A new version of an article that was built from the same values and shows the same image
+      // would have the same content
+      if (articleState == ArticleState.OUTDATED
+          || !studyProgramImageService.showsImage(journalArticle, image.fileEntry())) {
+        var content = buildContent(context.structure(), values, image.fileEntry());
+        journalArticle = addOrUpdateArticle(values, journalArticle, content, context);
       } else {
-        log.info("Importing study program: " + studyProgram.oid());
-
-        journalArticle =
-            journalArticleLocalService.addArticle(
-                studyProgram.oid(),
-                user.getUserId(),
-                jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
-                0,
-                titleMap,
-                null,
-                content,
-                structure.getStructureId(),
-                null,
-                serviceContext);
+        log.info("Study program unchanged: " + studyProgram.oid() + ". Skipping article update.");
       }
-      navigationService.addOrUpdateStudyProgramNavigationMenuItem(journalArticle, serviceContext);
-      studyProgramCategoryService.setJournalArticleCategories(journalArticle, user.getUserId());
+      // Stored right after the article, so that a failure below does not update the article again
+      // on every import. Also stored when the article was not updated, since its image may have
+      // been imported now. An unchanged value is not stored again.
+      studyProgramFingerprintService.setFingerprint(journalArticle, fingerprint, image.imported());
+      // Updated on every import, so a failure here is retried without updating the article
+      navigationService.addOrUpdateStudyProgramNavigationMenuItem(
+          journalArticle, context.serviceContext());
+      studyProgramCategoryService.setJournalArticleCategories(
+          journalArticle, context.user().getUserId());
+    } catch (InterruptedException e) {
+      throw e;
     } catch (Exception e) {
       log.error("Failed to import study program: " + studyProgram.oid(), e);
       reportError(
-          task, "Failed to import study program: " + studyProgram.oid() + " - " + e.getMessage());
+          context.task(),
+          "Failed to import study program: " + studyProgram.oid() + " - " + e.getMessage());
     }
   }
 
   /**
-   * Extracts an ingress (introductory text) from the given text by taking full sentences until
-   * reaching approximately 80 characters.
-   *
-   * @param text the input text, possibly containing HTML
-   * @return the extracted ingress text without HTML tags
+   * @param journalArticle the latest version of the article, or null if there is none yet
    */
-  private String extractIngress(String text) {
-    var stripped = HtmlUtil.stripHtml(text).trim();
-    var ingress = new StringBuilder();
-    int length = 0;
-    var matcher = SENTENCE_PATTERN.matcher(stripped);
-    while (matcher.find()) {
-      String sentence = matcher.group().trim();
-      if (length > 0 && (length + sentence.length() > 80)) break;
-      ingress.append(sentence).append(" ");
-      length += sentence.length() + 1;
-    }
-    if (length == 0) {
-      // No sentence found, fallback to matching words and cutting at 80 chars
-      var wordMatcher = WORD_PATTERN.matcher(stripped);
-      while (wordMatcher.find()) {
-        String word = wordMatcher.group();
-        if (length > 0 && (length + word.length() + 1 > 80)) break;
-        if (length > 0) {
-          ingress.append(" ");
-          length += 1;
-        }
-        ingress.append(word);
-        length += word.length();
+  private ArticleImage getArticleImage(
+      StudyProgramArticleValues values,
+      JournalArticle journalArticle,
+      ArticleState articleState,
+      ImportContext context)
+      throws InterruptedException {
+    // The image of an article that is up to date has been imported, so it is imported again only
+    // if it has been deleted, which restores it from the Recycle Bin or adds a new file. A missing
+    // image is retried.
+    if (articleState == ArticleState.UP_TO_DATE) {
+      var shownImage = studyProgramImageService.getShownImage(journalArticle);
+      if (shownImage != null) {
+        return new ArticleImage(shownImage, true);
       }
     }
-    if (ingress.isEmpty()) {
-      // Fallback to hard cut if no sentences or words found
-      ingress.append(stripped, 0, Math.min(80, stripped.length()));
-    }
-
-    return ingress.toString().trim();
+    return studyProgramImageService.getImage(
+        values, journalArticle, context.placeholderImage(), context.user().getUserId());
   }
 
-  private DDMFormFieldValue createLinkFieldsetValue(
-      StudyProgramDto studyProgram, Locale defaultLocale) {
-
-    var fieldset = new DDMFormFieldValue();
-    fieldset.setName("FieldsetLink");
-    fieldset.setValue(new UnlocalizedValue(StringPool.BLANK));
-
-    var linkText = new DDMFormFieldValue();
-    linkText.setName("linktext");
-    var textVal = new LocalizedValue(defaultLocale);
-    var fiName = studyProgram.nimi().getOrDefault("fi", "");
-    var enName = studyProgram.nimi().getOrDefault("en", fiName);
-    var svName = studyProgram.nimi().getOrDefault("sv", fiName);
-    textVal.addString(FINNISH, fiName);
-    textVal.addString(ENGLISH, enName);
-    textVal.addString(SWEDISH, svName);
-    linkText.setValue(textVal);
-
-    var linkUrl = new DDMFormFieldValue();
-    linkUrl.setName("linkurl");
-    var urlVal = new LocalizedValue(defaultLocale);
-    var baseUrl = "https://opintopolku.fi/konfo/";
-    urlVal.addString(FINNISH, baseUrl + "fi/koulutus/" + studyProgram.oid());
-    urlVal.addString(ENGLISH, baseUrl + "en/koulutus/" + studyProgram.oid());
-    urlVal.addString(SWEDISH, baseUrl + "sv/koulutus/" + studyProgram.oid());
-    linkUrl.setValue(urlVal);
-
-    fieldset.addNestedDDMFormFieldValue(linkText);
-    fieldset.addNestedDDMFormFieldValue(linkUrl);
-
-    return fieldset;
-  }
-
-  private String getContent(
-      DDMStructure structure,
-      StudyProgramDto studyProgram,
-      Map<Locale, String> titleMap,
-      long userId)
-      throws Exception {
-    var ddmForm = structure.getDDMForm();
-    var formValues = new DDMFormValues(ddmForm);
-    formValues.setAvailableLocales(Set.of(FINNISH, ENGLISH, SWEDISH));
-    formValues.setDefaultLocale(FINNISH);
-
-    formValues.addDDMFormFieldValue(
-        createFieldValue(
-            "ingress",
-            Map.of(
-                FINNISH, extractIngress(studyProgram.getKuvaus("fi")),
-                ENGLISH, extractIngress(studyProgram.getKuvaus("en")),
-                SWEDISH, extractIngress(studyProgram.getKuvaus("sv")))));
-
-    if (Validator.isNotNull(studyProgram.teemakuva())) {
-      var imageUrl = studyProgram.teemakuva();
-      var fileEntry =
-          studyProgramFileService.getStudyProgramImage(imageUrl, studyProgram.oid(), userId);
-      if (fileEntry != null) {
-        var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
-        formValues.addDDMFormFieldValue(imageFormFieldValue);
-      } else {
-        log.warn("Image import failed " + studyProgram.teemakuva());
-        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
-      }
-    } else {
-      var fileEntry = studyProgramFileService.getStudyProgramImagePlaceholder(userId);
-      if (fileEntry != null) {
-        var imageFormFieldValue = createImageFieldValue(fileEntry, titleMap);
-        formValues.addDDMFormFieldValue(imageFormFieldValue);
-      } else {
-        log.warn("Placeholder image missing");
-        formValues.addDDMFormFieldValue(createUnlocalizedFieldValue("image", ""));
-      }
-    }
-
-    formValues.addDDMFormFieldValue(
-        createFieldValue(
-            "content",
-            Map.of(
-                FINNISH, studyProgram.getKuvaus("fi"),
-                ENGLISH, studyProgram.getKuvaus("en"),
-                SWEDISH, studyProgram.getKuvaus("sv"))));
-
-    formValues.addDDMFormFieldValue(
-        createLinkFieldsetValue(studyProgram, formValues.getDefaultLocale()));
+  /**
+   * Builds the article content from the given values and image only, so that their fingerprint
+   * covers everything that the article is built from. {@link StudyProgramArticleFields} places them
+   * in the fields of the structure.
+   */
+  private String buildContent(
+      DDMStructure structure, StudyProgramArticleValues values, FileEntry image) throws Exception {
+    var formValues =
+        StudyProgramArticleFields.createFormValues(structure.getDDMForm(), values, image);
     return journalConverter.getContent(
-        structure,
-        ddm.getFields(structure.getStructureId(), formValues),
-        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
+        structure, ddm.getFields(structure.getStructureId(), formValues), getGroupId());
   }
+
+  private JournalArticle addOrUpdateArticle(
+      StudyProgramArticleValues values,
+      JournalArticle journalArticle,
+      String content,
+      ImportContext context)
+      throws Exception {
+    if (journalArticle != null) {
+      log.info("Study program or its article changed: " + values.oid() + ". Updating article.");
+
+      return journalArticleLocalService.updateArticle(
+          journalArticle.getUserId(),
+          journalArticle.getGroupId(),
+          journalArticle.getFolderId(),
+          journalArticle.getArticleId(),
+          journalArticle.getVersion(),
+          values.title(),
+          journalArticle.getDescriptionMap(),
+          content,
+          journalArticle.getLayoutUuid(),
+          context.serviceContext());
+    }
+
+    log.info("Importing study program: " + values.oid());
+
+    return journalArticleLocalService.addArticle(
+        values.oid(),
+        context.user().getUserId(),
+        getGroupId(),
+        0,
+        values.title(),
+        null,
+        content,
+        context.structure().getStructureId(),
+        null,
+        context.serviceContext());
+  }
+
+  /** Deletes the article and menu item of a study program that is no longer in Konfo. */
+  private void deleteStudyProgram(String externalReferenceCode, ServiceContext serviceContext) {
+    try {
+      var journalArticle =
+          journalArticleLocalService.fetchLatestArticleByExternalReferenceCode(
+              getGroupId(), externalReferenceCode);
+      if (journalArticle != null) {
+        navigationService.deleteStudyProgramNavigationMenuItem(externalReferenceCode);
+        journalArticleLocalService.deleteArticle(
+            getGroupId(), journalArticle.getArticleId(), serviceContext);
+        log.info("Deleted study program: " + externalReferenceCode);
+      }
+    } catch (PortalException e) {
+      log.error("Failed to delete study program: " + externalReferenceCode, e);
+    }
+  }
+
+  private long getGroupId() {
+    return jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
+  }
+
+  /**
+   * What the import of every study program uses.
+   *
+   * @param konfoUrl the URL of the Konfo that the articles link to
+   * @param structureDefinitions the definitions of the DDM structure of the articles and the field
+   *     sets that it uses
+   * @param placeholderImage the image of the articles of study programs without one, or null if it
+   *     is missing
+   */
+  private record ImportContext(
+      BackgroundTask task,
+      String konfoUrl,
+      DDMStructure structure,
+      List<String> structureDefinitions,
+      FileEntry placeholderImage,
+      User user,
+      ServiceContext serviceContext) {}
 }

@@ -19,9 +19,6 @@ import java.util.*;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
-/**
- * @author JussiSirén
- */
 @Component(service = StudyProgramService.class, immediate = true)
 public class StudyProgramService {
 
