@@ -117,6 +117,13 @@ jobs:
           echo "Short tag: ${DOCKER_METADATA_OUTPUT_TAGS##*:}"
           echo "tag=${DOCKER_METADATA_OUTPUT_TAGS##*:}" >> $GITHUB_OUTPUT
 
+      - name: Login to public ECR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: public.ecr.aws
+        env:
+          AWS_REGION: us-east-1
+
       - name: Login to ECR
         id: ecr-login
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
