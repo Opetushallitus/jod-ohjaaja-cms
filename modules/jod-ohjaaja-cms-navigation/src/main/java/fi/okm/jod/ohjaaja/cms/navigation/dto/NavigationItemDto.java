@@ -10,6 +10,8 @@
 package fi.okm.jod.ohjaaja.cms.navigation.dto;
 
 import jakarta.validation.constraints.NotNull;
+import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -30,4 +32,18 @@ public record NavigationItemDto(
     Long articleId,
     Long categoryId,
     List<NavigationItemDto> children,
-    Long parentId) {}
+    Long parentId)
+    implements Serializable {
+
+  // The navigation is cached and shared by all requests, so it must not be modifiable
+  public NavigationItemDto {
+    name_i18n = unmodifiable(name_i18n);
+    slug_i18n = unmodifiable(slug_i18n);
+    description_i18n = unmodifiable(description_i18n);
+    children = children == null ? null : Collections.unmodifiableList(children);
+  }
+
+  private static Map<String, String> unmodifiable(Map<String, String> map) {
+    return map == null ? null : Collections.unmodifiableMap(map);
+  }
+}
