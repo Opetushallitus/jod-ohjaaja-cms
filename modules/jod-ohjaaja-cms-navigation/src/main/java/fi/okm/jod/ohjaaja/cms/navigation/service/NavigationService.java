@@ -30,7 +30,10 @@ public interface NavigationService {
   SiteNavigationMenuItem getStudyProgramsParentMenuItem()
       throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection;
 
-  NavigationDto getNavigation(Long siteId, String languageId);
+  /** Returns the navigation of the JOD Ohjaaja site as seen by a guest. */
+  NavigationDto getNavigation();
+
+  void clearNavigationCache();
 
   void initNavigation();
 }

@@ -10,7 +10,15 @@
 package fi.okm.jod.ohjaaja.cms.navigation.dto;
 
 import jakarta.validation.constraints.NotNull;
+import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 
 public record NavigationDto(
-    @NotNull Long id, @NotNull Long siteId, @NotNull List<NavigationItemDto> navigationItems) {}
+    @NotNull Long id, @NotNull Long siteId, @NotNull List<NavigationItemDto> navigationItems)
+    implements Serializable {
+  public NavigationDto {
+    navigationItems =
+        navigationItems == null ? null : Collections.unmodifiableList(navigationItems);
+  }
+}

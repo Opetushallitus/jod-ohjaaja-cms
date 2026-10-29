@@ -19,7 +19,13 @@ import com.liferay.expando.kernel.service.ExpandoColumnLocalServiceUtil;
 import com.liferay.expando.kernel.util.ExpandoBridgeFactoryUtil;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
+import com.liferay.portal.kernel.cache.MultiVMPool;
+import com.liferay.portal.kernel.cache.PortalCache;
+import com.liferay.portal.kernel.cache.PortalCacheHelperUtil;
+import com.liferay.portal.kernel.cache.PortalCacheListener;
+import com.liferay.portal.kernel.cache.PortalCacheListenerScope;
 import com.liferay.portal.kernel.exception.PortalException;
+import com.liferay.portal.kernel.exception.SystemException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.ResourceConstants;
@@ -31,6 +37,7 @@ import com.liferay.portal.kernel.security.permission.resource.ModelResourcePermi
 import com.liferay.portal.kernel.service.ResourcePermissionLocalServiceUtil;
 import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.transaction.TransactionCommitCallbackUtil;
 import com.liferay.portal.kernel.util.GetterUtil;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
@@ -54,13 +61,20 @@ import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingExc
 import fi.okm.jod.ohjaaja.cms.util.AdminUtil;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import fi.okm.jod.ohjaaja.cms.util.PermissionUtil;
+import fi.okm.jod.ohjaaja.cms.util.RunAsUtil;
 import fi.okm.jod.ohjaaja.cms.util.SlugUtil;
 import java.io.Serializable;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 
 @Component(immediate = true, service = NavigationService.class)
@@ -137,6 +151,15 @@ public class NavigationServiceImpl implements NavigationService {
             "Hide from the main category page most viewed carousel"))
   };
 
+  private static final String NAVIGATION_CACHE_NAME =
+      NavigationServiceImpl.class.getName() + ".navigation";
+  private static final String NAVIGATION_CACHE_KEY = "navigation";
+  // A safety net for changes that are not covered by the cache invalidating model listeners. The
+  // cache can also be cleared in Control Panel > Server Administration > Resources > Clear content
+  // cached across the cluster.
+  private static final int NAVIGATION_CACHE_TIME_TO_LIVE = (int) Duration.ofHours(24).toSeconds();
+  private static final Duration BUILD_LOCK_TIMEOUT = Duration.ofSeconds(10);
+
   private static final Log log = LogFactoryUtil.getLog(NavigationServiceImpl.class);
 
   @Reference private SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
@@ -152,18 +175,158 @@ public class NavigationServiceImpl implements NavigationService {
 
   @Reference private PLOEntryLocalService ploEntryLocalService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Reference private MultiVMPool multiVMPool;
 
+  private PortalCache<String, NavigationDto> navigationCache;
+  // Incremented whenever the cache is cleared, also by another cluster node, so that a navigation
+  // built from the data before the clear is not cached
+  private final AtomicLong navigationCacheGeneration = new AtomicLong();
+  private final ReentrantLock buildLock = new ReentrantLock();
+
+  @Activate
+  @SuppressWarnings("unchecked")
+  protected void activate() {
+    navigationCache =
+        (PortalCache<String, NavigationDto>) multiVMPool.getPortalCache(NAVIGATION_CACHE_NAME);
+    navigationCache.registerPortalCacheListener(
+        new NavigationCacheRemoveAllListener(), PortalCacheListenerScope.ALL);
+  }
+
+  @Deactivate
+  protected void deactivate() {
+    multiVMPool.removePortalCache(NAVIGATION_CACHE_NAME);
+  }
+
+  // The navigation is only used by the public UI, so it is always built with the guest's
+  // permissions and the same navigation can be cached for everyone
   @Override
-  public NavigationDto getNavigation(Long siteId, String languageId) {
-    var siteNavigationMenus =
-        siteNavigationMenuService.getSiteNavigationMenus(
-            jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
-
-    if (!siteNavigationMenus.isEmpty()) {
-      return toNavigationDto(siteNavigationMenus.getFirst(), languageId);
+  public NavigationDto getNavigation() {
+    var cachedNavigation = navigationCache.get(NAVIGATION_CACHE_KEY);
+    if (cachedNavigation != null) {
+      return cachedNavigation;
     }
 
-    return null;
+    // Bounded, so that a stuck build cannot tie up the request threads
+    if (!tryLockBuild()) {
+      return buildNavigationAsGuest();
+    }
+    try {
+      cachedNavigation = navigationCache.get(NAVIGATION_CACHE_KEY);
+      if (cachedNavigation != null) {
+        return cachedNavigation;
+      }
+
+      var generation = navigationCacheGeneration.get();
+      var navigation = buildNavigationAsGuest();
+      if (navigation != null && generation == navigationCacheGeneration.get()) {
+        PortalCacheHelperUtil.putWithoutReplicator(
+            navigationCache, NAVIGATION_CACHE_KEY, navigation, NAVIGATION_CACHE_TIME_TO_LIVE);
+        // The cache may have been cleared between the check and the put
+        if (generation != navigationCacheGeneration.get()) {
+          PortalCacheHelperUtil.removeWithoutReplicator(navigationCache, NAVIGATION_CACHE_KEY);
+        }
+      }
+      return navigation;
+    } finally {
+      buildLock.unlock();
+    }
+  }
+
+  private boolean tryLockBuild() {
+    try {
+      return buildLock.tryLock(BUILD_LOCK_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
+    }
+  }
+
+  // Cleared after the commit: until then the other transactions still see the old data
+  @Override
+  public void clearNavigationCache() {
+    TransactionCommitCallbackUtil.registerCallback(
+        () -> {
+          navigationCache.removeAll();
+          return null;
+        });
+  }
+
+  private NavigationDto buildNavigationAsGuest() {
+    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    try {
+      return RunAsUtil.callAsGuest(
+          group.getCompanyId(),
+          () -> {
+            var siteNavigationMenus =
+                siteNavigationMenuService.getSiteNavigationMenus(group.getGroupId());
+            // The UI uses the localized fields, the plain fields are in the site's default language
+            var languageId = LocaleUtil.toLanguageId(PortalUtil.getSiteDefaultLocale(group));
+            return siteNavigationMenus.isEmpty()
+                ? null
+                : toNavigationDto(siteNavigationMenus.getFirst(), languageId);
+          });
+    } catch (PortalException e) {
+      throw new SystemException("Failed to build the navigation", e);
+    }
+  }
+
+  private class NavigationCacheRemoveAllListener
+      implements PortalCacheListener<String, NavigationDto> {
+
+    @Override
+    public void notifyRemoveAll(PortalCache<String, NavigationDto> portalCache) {
+      navigationCacheGeneration.incrementAndGet();
+    }
+
+    @Override
+    public void notifyEntryEvicted(
+        PortalCache<String, NavigationDto> portalCache,
+        String key,
+        NavigationDto value,
+        int timeToLive) {
+      // Only the clears are relevant, see notifyRemoveAll
+    }
+
+    @Override
+    public void notifyEntryExpired(
+        PortalCache<String, NavigationDto> portalCache,
+        String key,
+        NavigationDto value,
+        int timeToLive) {
+      // Only the clears are relevant, see notifyRemoveAll
+    }
+
+    @Override
+    public void notifyEntryPut(
+        PortalCache<String, NavigationDto> portalCache,
+        String key,
+        NavigationDto value,
+        int timeToLive) {
+      // Only the clears are relevant, see notifyRemoveAll
+    }
+
+    @Override
+    public void notifyEntryRemoved(
+        PortalCache<String, NavigationDto> portalCache,
+        String key,
+        NavigationDto value,
+        int timeToLive) {
+      // Only the clears are relevant, see notifyRemoveAll
+    }
+
+    @Override
+    public void notifyEntryUpdated(
+        PortalCache<String, NavigationDto> portalCache,
+        String key,
+        NavigationDto value,
+        int timeToLive) {
+      // Only the clears are relevant, see notifyRemoveAll
+    }
+
+    @Override
+    public void dispose() {
+      // Nothing to release
+    }
   }
 
   @Override

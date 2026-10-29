@@ -10,13 +10,10 @@
 package fi.okm.jod.ohjaaja.cms.navigation.rest.application;
 
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Application;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
 import java.util.Collections;
 import java.util.Set;
@@ -42,12 +39,22 @@ public class NavigationRestApplication extends Application {
   }
 
   @GET
+  @Produces("application/json")
+  public Response navigation() {
+    return Response.ok().entity(navigationService.getNavigation()).build();
+  }
+
+  /**
+   * The previous path of the navigation, kept until the UI uses the path without the site ID.
+   *
+   * @deprecated use {@link #navigation()}, the site ID is ignored
+   */
+  @Deprecated(forRemoval = true)
+  @GET
   @Path("/{siteId}")
   @Produces("application/json")
-  public Response navigation(
-      @Context HttpServletRequest request, @PathParam("siteId") Long siteId) {
-    String languageId = request.getLocale().toLanguageTag();
-    return Response.ok().entity(navigationService.getNavigation(siteId, languageId)).build();
+  public Response navigationBySiteId() {
+    return navigation();
   }
 
   @Activate

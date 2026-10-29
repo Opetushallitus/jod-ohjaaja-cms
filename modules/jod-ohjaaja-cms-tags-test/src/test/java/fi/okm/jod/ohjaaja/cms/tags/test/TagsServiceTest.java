@@ -146,6 +146,8 @@ public class TagsServiceTest {
 
     Assert.assertEquals(200, guestGet(sites + "/structured-contents"));
     Assert.assertEquals(200, guestGet(base + "/jod-tags/" + TEST_GROUP_ID));
+    Assert.assertEquals(200, guestGet(base + "/jod-navigation"));
+    // The deprecated path that is kept until the UI uses the path without the site ID
     Assert.assertEquals(200, guestGet(base + "/jod-navigation/" + TEST_GROUP_ID));
     Assert.assertEquals(403, guestGet(sites + "/structured-contents/by-key/does-not-exist"));
   }

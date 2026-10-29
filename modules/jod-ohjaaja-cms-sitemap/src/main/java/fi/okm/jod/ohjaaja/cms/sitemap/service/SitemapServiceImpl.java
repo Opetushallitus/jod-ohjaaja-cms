@@ -15,7 +15,6 @@ import com.liferay.portal.kernel.dao.orm.DynamicQueryFactoryUtil;
 import com.liferay.portal.kernel.dao.orm.ProjectionFactoryUtil;
 import com.liferay.portal.kernel.dao.orm.PropertyFactoryUtil;
 import com.liferay.portal.kernel.dao.orm.RestrictionsFactoryUtil;
-import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.util.PropsUtil;
@@ -23,10 +22,7 @@ import com.liferay.portal.kernel.util.Validator;
 import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationItemDto;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
-import fi.okm.jod.ohjaaja.cms.sitemap.model.Language;
 import fi.okm.jod.ohjaaja.cms.sitemap.xml.SitemapXmlWriter;
-import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
-import fi.okm.jod.ohjaaja.cms.util.RunAsUtil;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -59,7 +55,6 @@ public class SitemapServiceImpl implements SitemapService {
   private static final Log log = LogFactoryUtil.getLog(SitemapServiceImpl.class);
 
   @Reference private NavigationService navigationService;
-  @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
   @Reference private JournalArticleLocalService journalArticleLocalService;
 
   private final ReentrantLock buildLock = new ReentrantLock();
@@ -112,7 +107,7 @@ public class SitemapServiceImpl implements SitemapService {
       }
       try {
         cachedSitemap = build();
-      } catch (PortalException | RuntimeException e) {
+      } catch (RuntimeException e) {
         if (cached == null) {
           retryBuildAfter = Instant.now().plus(RETRY_AFTER_FAILURE);
           throw new IllegalStateException("Failed to build the sitemap", e);
@@ -135,24 +130,18 @@ public class SitemapServiceImpl implements SitemapService {
     }
   }
 
-  private CachedSitemap build() throws PortalException {
+  private CachedSitemap build() {
     var start = System.nanoTime();
     var frontendUrl = getFrontendUrl();
-    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
 
+    // The navigation is built with the guest's permissions, so it only contains public pages
+    var navigation = navigationService.getNavigation();
+    var navigationItems =
+        navigation != null ? navigation.navigationItems() : List.<NavigationItemDto>of();
     var urls =
-        RunAsUtil.callAsGuest(
-            group.getCompanyId(),
-            () -> {
-              var navigation =
-                  navigationService.getNavigation(
-                      group.getGroupId(), Language.DEFAULT.languageTag());
-              var navigationItems =
-                  navigation != null ? navigation.navigationItems() : List.<NavigationItemDto>of();
-              return new SitemapModelBuilder(
-                      frontendUrl, getArticleModifiedDates(getArticleIds(navigationItems)))
-                  .build(navigationItems);
-            });
+        new SitemapModelBuilder(
+                frontendUrl, getArticleModifiedDates(getArticleIds(navigationItems)))
+            .build(navigationItems);
 
     var cached = new CachedSitemap(SitemapXmlWriter.write(urls), Instant.now().plus(TIME_TO_LIVE));
 

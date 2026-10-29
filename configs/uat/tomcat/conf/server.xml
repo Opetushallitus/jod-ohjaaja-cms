@@ -71,6 +71,9 @@
                redirectPort="8443"
                maxParameterCount="1000"
                secure="true" scheme="https"
+               compression="on"
+               compressionMinSize="2048"
+               compressibleMimeType="application/json,application/xml"
     />
 
 
