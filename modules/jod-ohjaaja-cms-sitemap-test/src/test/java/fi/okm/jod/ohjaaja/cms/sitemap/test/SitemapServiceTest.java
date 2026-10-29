@@ -43,7 +43,6 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
 import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
-import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.sitemap.service.SitemapService;
 import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
@@ -125,9 +124,10 @@ public class SitemapServiceTest {
         getService(PermissionCheckerFactory.class).create(TestPropsValues.getUser()));
 
     var serviceContext = getServiceContext(true);
-    var navigation = getService(NavigationService.class).getNavigation(groupId, "fi-FI");
-    if (navigation != null) {
-      menuId = navigation.id();
+    // The same menu the navigation uses: the first one of the site
+    var menus = siteNavigationMenuLocalService.getSiteNavigationMenus(groupId);
+    if (!menus.isEmpty()) {
+      menuId = menus.getFirst().getSiteNavigationMenuId();
     } else {
       createdMenuId =
           siteNavigationMenuLocalService

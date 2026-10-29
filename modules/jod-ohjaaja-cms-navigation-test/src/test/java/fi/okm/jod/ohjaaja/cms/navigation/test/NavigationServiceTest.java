@@ -12,10 +12,13 @@ package fi.okm.jod.ohjaaja.cms.navigation.test;
 import com.liferay.dynamic.data.mapping.service.DDMStructureLocalService;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
+import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.service.ResourcePermissionLocalService;
+import com.liferay.portal.kernel.service.RoleLocalService;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.test.util.ServiceContextTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
@@ -271,7 +274,7 @@ public class NavigationServiceTest {
             null,
             serviceContext);
 
-    var menuId = navigationService.getNavigation(TEST_GROUP_ID, "en_US").id();
+    var menuId = navigationService.getNavigation().id();
     // Format used by menu items created in the DXP 2026 UI: no classPK, only the article ERC
     var ercItem =
         siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
@@ -299,7 +302,7 @@ public class NavigationServiceTest {
             serviceContext);
 
     try {
-      var items = navigationService.getNavigation(TEST_GROUP_ID, "en_US").navigationItems();
+      var items = navigationService.getNavigation().navigationItems();
       var resolved = findItem(items, ercItem.getSiteNavigationMenuItemId());
       var broken = findItem(items, brokenItem.getSiteNavigationMenuItemId());
 
@@ -330,10 +333,27 @@ public class NavigationServiceTest {
 
       var afterDraft =
           findItem(
-              navigationService.getNavigation(TEST_GROUP_ID, "en_US").navigationItems(),
+              navigationService.getNavigation().navigationItems(),
               ercItem.getSiteNavigationMenuItemId());
       Assert.assertEquals(Long.valueOf(article.getResourcePrimKey()), afterDraft.articleId());
       Assert.assertEquals("Navigation test article", afterDraft.name());
+
+      // The navigation is built with the guest's permissions, even when an admin requests it
+      var guestRole = getService(RoleLocalService.class).getRole(article.getCompanyId(), "Guest");
+      getService(ResourcePermissionLocalService.class)
+          .setResourcePermissions(
+              article.getCompanyId(),
+              articleClassName,
+              ResourceConstants.SCOPE_INDIVIDUAL,
+              String.valueOf(article.getResourcePrimKey()),
+              guestRole.getRoleId(),
+              new String[0]);
+
+      var afterGuestPermissionRemoved =
+          findItem(
+              navigationService.getNavigation().navigationItems(),
+              ercItem.getSiteNavigationMenuItemId());
+      Assert.assertNull(afterGuestPermissionRemoved.articleId());
     } finally {
       siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(ercItem);
       siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(brokenItem);
@@ -341,6 +361,69 @@ public class NavigationServiceTest {
       journalArticleLocalService.deleteArticle(
           TEST_GROUP_ID, article.getArticleId(), serviceContext);
       ddmStructureLocalService.deleteStructure(structure);
+    }
+  }
+
+  @Test
+  public void shouldCacheNavigationUntilTheMenuChanges() throws Exception {
+    var userId = TestPropsValues.getUserId();
+    var serviceContext = ServiceContextTestUtil.getServiceContext(TEST_GROUP_ID, userId);
+    SiteNavigationMenuItem menuItem = null;
+
+    try {
+      var navigation = getCachedNavigation();
+      // The cached navigation is shared by all requests
+      Assert.assertThrows(
+          UnsupportedOperationException.class, () -> navigation.navigationItems().clear());
+
+      menuItem =
+          siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
+              "nav-test-cache-item-" + System.currentTimeMillis(),
+              userId,
+              TEST_GROUP_ID,
+              navigation.id(),
+              0,
+              "url",
+              "title=Cache test item\n",
+              serviceContext);
+
+      var menuItemId = menuItem.getSiteNavigationMenuItemId();
+      var navigationAfterChange = navigationService.getNavigation();
+      Assert.assertNotSame(navigation, navigationAfterChange);
+      Assert.assertTrue(
+          navigationAfterChange.navigationItems().stream()
+              .anyMatch(item -> item.id() == menuItemId));
+    } finally {
+      if (menuItem != null) {
+        siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(menuItem);
+      }
+    }
+  }
+
+  @Test
+  public void shouldRestorePermissionCheckerAfterGetNavigation() {
+    var permissionChecker = PermissionThreadLocal.getPermissionChecker();
+
+    navigationService.clearNavigationCache();
+    navigationService.getNavigation();
+
+    Assert.assertSame(permissionChecker, PermissionThreadLocal.getPermissionChecker());
+  }
+
+  /**
+   * Returns the navigation after checking that it is cached. Another test may change the content
+   * and clear the cache between the calls, so it is tried a few times.
+   */
+  private static NavigationDto getCachedNavigation() {
+    for (var attempt = 1; ; attempt++) {
+      var navigation = navigationService.getNavigation();
+      Assert.assertNotNull(navigation);
+      if (navigation == navigationService.getNavigation()) {
+        return navigation;
+      }
+      if (attempt == 3) {
+        Assert.fail("The navigation should be cached");
+      }
     }
   }
 
@@ -357,19 +440,9 @@ public class NavigationServiceTest {
 
   @Test
   public void shouldGetNavigationWithItems() {
-    System.out.println("\n=== Testing Navigation Retrieval ===");
+    var navigation = navigationService.getNavigation();
 
-    NavigationDto navigationEN = navigationService.getNavigation(TEST_GROUP_ID, "en_US");
-    NavigationDto navigationFI = navigationService.getNavigation(TEST_GROUP_ID, "fi_FI");
-
-    Assert.assertNotNull("English navigation should not be null", navigationEN);
-    Assert.assertNotNull("Finnish navigation should not be null", navigationFI);
-    Assert.assertNotNull(
-        "English navigation items should not be null", navigationEN.navigationItems());
-    Assert.assertNotNull(
-        "Finnish navigation items should not be null", navigationFI.navigationItems());
-
-    System.out.println("✅ EN navigation: " + navigationEN.navigationItems().size() + " items");
-    System.out.println("✅ FI navigation: " + navigationFI.navigationItems().size() + " items");
+    Assert.assertNotNull("Navigation should not be null", navigation);
+    Assert.assertNotNull("Navigation items should not be null", navigation.navigationItems());
   }
 }
