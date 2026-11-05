@@ -14,7 +14,17 @@ import java.util.List;
 import java.util.Map;
 
 public interface TagsService {
+
+  /** Returns the tags of the site, or an empty list if the site has no tag vocabulary. */
   List<JodTaxonomyCategoryDto> getJodTaxonomyCategories(Long siteId);
+
+  /**
+   * Creates the tag vocabulary of the JOD Ohjaaja site if it does not exist and grants the guest
+   * the view permission on it. A vocabulary named "tags" without the external reference code is
+   * taken over instead of creating another one. Run when the service is activated, so the
+   * vocabulary exists before the service is used.
+   */
+  void initTagVocabulary();
 
   void addOrUpdateJodTaxonomyCategory(
       Long categoryId,

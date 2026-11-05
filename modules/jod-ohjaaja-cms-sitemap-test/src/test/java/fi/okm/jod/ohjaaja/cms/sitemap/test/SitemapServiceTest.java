@@ -43,6 +43,7 @@ import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
 import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
+import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.sitemap.service.SitemapService;
 import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
@@ -91,12 +92,10 @@ public class SitemapServiceTest {
   private static JournalArticleLocalService journalArticleLocalService;
   private static DDMStructureLocalService ddmStructureLocalService;
   private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
-  private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
   private static PermissionChecker originalPermissionChecker;
   private static DDMStructure structure;
   private static long groupId;
   private static long menuId;
-  private static long createdMenuId;
   private static String frontendUrl;
   private static String originalFrontendUrl;
 
@@ -110,7 +109,8 @@ public class SitemapServiceTest {
     journalArticleLocalService = getService(JournalArticleLocalService.class);
     ddmStructureLocalService = getService(DDMStructureLocalService.class);
     siteNavigationMenuItemLocalService = getService(SiteNavigationMenuItemLocalService.class);
-    siteNavigationMenuLocalService = getService(SiteNavigationMenuLocalService.class);
+    SiteNavigationMenuLocalService siteNavigationMenuLocalService =
+        getService(SiteNavigationMenuLocalService.class);
     groupId = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup().getGroupId();
     // The test image has no portal-ext.properties of an environment
     originalFrontendUrl = PropsUtil.get(FRONTEND_URL_KEY);
@@ -124,22 +124,12 @@ public class SitemapServiceTest {
         getService(PermissionCheckerFactory.class).create(TestPropsValues.getUser()));
 
     var serviceContext = getServiceContext(true);
-    // The same menu the navigation uses: the first one of the site
-    var menus = siteNavigationMenuLocalService.getSiteNavigationMenus(groupId);
-    if (!menus.isEmpty()) {
-      menuId = menus.getFirst().getSiteNavigationMenuId();
-    } else {
-      createdMenuId =
-          siteNavigationMenuLocalService
-              .addSiteNavigationMenu(
-                  "sitemap-test-menu-" + System.currentTimeMillis(),
-                  TestPropsValues.getUserId(),
-                  groupId,
-                  "Sitemap test menu",
-                  serviceContext)
-              .getSiteNavigationMenuId();
-      menuId = createdMenuId;
-    }
+    // The menu the navigation uses, created on startup
+    menuId =
+        siteNavigationMenuLocalService
+            .getSiteNavigationMenuByExternalReferenceCode(
+                NavigationService.NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE, groupId)
+            .getSiteNavigationMenuId();
 
     structure = addStructure(serviceContext);
   }
@@ -204,9 +194,6 @@ public class SitemapServiceTest {
     try {
       if (structure != null) {
         ddmStructureLocalService.deleteStructure(structure);
-      }
-      if (createdMenuId > 0) {
-        siteNavigationMenuLocalService.deleteSiteNavigationMenu(createdMenuId);
       }
     } finally {
       PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);

@@ -16,6 +16,7 @@ import com.liferay.expando.kernel.model.ExpandoColumn;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
 import com.liferay.expando.kernel.model.ExpandoTableConstants;
 import com.liferay.expando.kernel.service.ExpandoColumnLocalServiceUtil;
+import com.liferay.expando.kernel.service.ExpandoValueLocalServiceUtil;
 import com.liferay.expando.kernel.util.ExpandoBridgeFactoryUtil;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
@@ -28,6 +29,7 @@ import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.exception.SystemException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.model.Group;
 import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.auth.PrincipalThreadLocal;
@@ -50,6 +52,7 @@ import com.liferay.portal.vulcan.util.LocalizedMapUtil;
 import com.liferay.site.navigation.model.SiteNavigationMenu;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
+import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
 import com.liferay.site.navigation.service.SiteNavigationMenuService;
 import com.liferay.site.navigation.util.comparator.SiteNavigationMenuItemOrderComparator;
 import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
@@ -65,7 +68,9 @@ import fi.okm.jod.ohjaaja.cms.util.RunAsUtil;
 import fi.okm.jod.ohjaaja.cms.util.SlugUtil;
 import java.io.Serializable;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -93,6 +98,10 @@ public class NavigationServiceImpl implements NavigationService {
       "com.liferay.journal.model.JournalArticle";
 
   private static final String TYPE_CUSTOM_FIELD_NAME = "Type";
+  private static final String TYPE_CATEGORY_MAIN = "CategoryMain";
+  private static final String TYPE_STUDY_PROGRAMS_LISTING = "StudyProgramsListing";
+
+  private static final String NAVIGATION_MENU_NAME = "JOD Ohjaaja";
   private static final String HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME =
       "hideFromHomePageNewestCarousel";
   private static final String HIDE_FROM_HOME_PAGE_MOST_VIEWED_CAROUSEL_FIELD_NAME =
@@ -106,7 +115,9 @@ public class NavigationServiceImpl implements NavigationService {
     new CustomFieldData(
         TYPE_CUSTOM_FIELD_NAME,
         ExpandoColumnConstants.STRING_ARRAY,
-        new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"},
+        new String[] {
+          "Article", "CategoryListing", TYPE_CATEGORY_MAIN, TYPE_STUDY_PROGRAMS_LISTING
+        },
         ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
         Map.of(LANGUAGE_ID_FI_FI, "Tyyppi", LANGUAGE_ID_EN_US, "Type")),
     new CustomFieldData(
@@ -159,12 +170,15 @@ public class NavigationServiceImpl implements NavigationService {
   // cached across the cluster.
   private static final int NAVIGATION_CACHE_TIME_TO_LIVE = (int) Duration.ofHours(24).toSeconds();
   private static final Duration BUILD_LOCK_TIMEOUT = Duration.ofSeconds(10);
+  private static final Duration RETRY_INITIALIZATION_AFTER = Duration.ofMinutes(1);
 
   private static final Log log = LogFactoryUtil.getLog(NavigationServiceImpl.class);
 
   @Reference private SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
   @Reference private SiteNavigationMenuService siteNavigationMenuService;
+  @Reference private SiteNavigationMenuLocalService siteNavigationMenuLocalService;
   @Reference private AssetCategoryLocalService assetCategoryLocalService;
+  @Reference private MainCategoryService mainCategoryService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
 
   @Reference(target = "(model.class.name=com.liferay.asset.kernel.model.AssetCategory)")
@@ -182,6 +196,7 @@ public class NavigationServiceImpl implements NavigationService {
   // built from the data before the clear is not cached
   private final AtomicLong navigationCacheGeneration = new AtomicLong();
   private final ReentrantLock buildLock = new ReentrantLock();
+  private volatile Instant retryInitializationAfter = Instant.MIN;
 
   @Activate
   @SuppressWarnings("unchecked")
@@ -253,6 +268,7 @@ public class NavigationServiceImpl implements NavigationService {
 
   private NavigationDto buildNavigationAsGuest() {
     var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    retryNavigationInitialization(group);
     try {
       return RunAsUtil.callAsGuest(
           group.getCompanyId(),
@@ -261,9 +277,18 @@ public class NavigationServiceImpl implements NavigationService {
                 siteNavigationMenuService.getSiteNavigationMenus(group.getGroupId());
             // The UI uses the localized fields, the plain fields are in the site's default language
             var languageId = LocaleUtil.toLanguageId(PortalUtil.getSiteDefaultLocale(group));
-            return siteNavigationMenus.isEmpty()
+            // Only the managed menu, which the guest must be able to view
+            var siteNavigationMenu =
+                siteNavigationMenus.stream()
+                    .filter(
+                        menu ->
+                            NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE.equals(
+                                menu.getExternalReferenceCode()))
+                    .findFirst()
+                    .orElse(null);
+            return siteNavigationMenu == null
                 ? null
-                : toNavigationDto(siteNavigationMenus.getFirst(), languageId);
+                : toNavigationDto(siteNavigationMenu, languageId);
           });
     } catch (PortalException e) {
       throw new SystemException("Failed to build the navigation", e);
@@ -332,14 +357,397 @@ public class NavigationServiceImpl implements NavigationService {
   @Override
   public void initNavigation() {
     initCustomFields();
+    var siteNavigationMenu = initNavigationMenu();
+    if (siteNavigationMenu != null) {
+      initMainCategoryMenuItems(siteNavigationMenu);
+    }
+  }
+
+  /**
+   * The main categories are the top level of the navigation, in order. See {@link
+   * #getOrCreateMainCategoryMenuItem}.
+   */
+  private void initMainCategoryMenuItems(SiteNavigationMenu siteNavigationMenu) {
+    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    try {
+      AdminUtil.runAsAdmin(
+          group.getCompanyId(),
+          () -> {
+            var serviceContext = createServiceContext(group, PrincipalThreadLocal.getUserId());
+            for (var mainCategory : mainCategoryService.initMainCategories()) {
+              try {
+                getOrCreateMainCategoryMenuItem(siteNavigationMenu, mainCategory, serviceContext);
+              } catch (PortalException e) {
+                log.error(e.getMessage(), e);
+              }
+            }
+          });
+    } catch (Exception e) {
+      log.error("Failed to initialize the main categories of the navigation", e);
+    }
+  }
+
+  /**
+   * The menu item of a main category has the external reference code of the category. Once it
+   * exists, it is used as it is, also if it was moved or edited in the UI. A menu item created by
+   * hand for the category is taken over, one at the top level first, and a missing one is added at
+   * the end of the top level.
+   */
+  private synchronized SiteNavigationMenuItem getOrCreateMainCategoryMenuItem(
+      SiteNavigationMenu siteNavigationMenu,
+      AssetCategory mainCategory,
+      ServiceContext serviceContext)
+      throws PortalException {
+    var externalReferenceCode = mainCategory.getExternalReferenceCode();
+    var menuItem = fetchMenuItem(externalReferenceCode, siteNavigationMenu.getGroupId());
+    if (menuItem != null) {
+      if (menuItem.getSiteNavigationMenuId() != siteNavigationMenu.getSiteNavigationMenuId()) {
+        throw new PortalException(
+            "Menu item "
+                + externalReferenceCode
+                + " ("
+                + menuItem.getSiteNavigationMenuItemId()
+                + ") is not in the navigation menu "
+                + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE);
+      }
+      return menuItem;
+    }
+
+    menuItem =
+        getMenuItems(siteNavigationMenu).stream()
+            .filter(item -> isMenuItemOfCategory(item, mainCategory))
+            .min(
+                Comparator.comparing(
+                    (SiteNavigationMenuItem item) -> item.getParentSiteNavigationMenuItemId() != 0))
+            .orElse(null);
+    if (menuItem != null) {
+      return takeOverMenuItem(menuItem, externalReferenceCode);
+    }
+
+    return addCategoryMenuItem(
+        externalReferenceCode,
+        siteNavigationMenu,
+        0,
+        mainCategory,
+        TYPE_CATEGORY_MAIN,
+        serviceContext);
+  }
+
+  private List<SiteNavigationMenuItem> getMenuItems(SiteNavigationMenu siteNavigationMenu) {
+    return siteNavigationMenuItemLocalService.getSiteNavigationMenuItems(
+        siteNavigationMenu.getSiteNavigationMenuId(),
+        SiteNavigationMenuItemOrderComparator.getInstance(true));
+  }
+
+  private SiteNavigationMenuItem takeOverMenuItem(
+      SiteNavigationMenuItem menuItem, String externalReferenceCode) {
+    var previousExternalReferenceCode = menuItem.getExternalReferenceCode();
+    menuItem.setExternalReferenceCode(externalReferenceCode);
+    menuItem = siteNavigationMenuItemLocalService.updateSiteNavigationMenuItem(menuItem);
+    log.info(
+        "Took over menu item "
+            + menuItem.getSiteNavigationMenuItemId()
+            + ", changed its external reference code from "
+            + previousExternalReferenceCode
+            + " to "
+            + externalReferenceCode);
+    return menuItem;
+  }
+
+  /**
+   * The menu is initialized on startup, but if that failed, e.g. because of a database error, the
+   * navigation would be empty until the next restart. The navigation is cached, so this is tried
+   * only while the menu is missing, and at most once a minute so that a failing initialization does
+   * not hold up every request.
+   */
+  private void retryNavigationInitialization(Group group) {
+    if (fetchNavigationMenu(group.getGroupId()) != null
+        || Instant.now().isBefore(retryInitializationAfter)) {
+      return;
+    }
+    synchronized (this) {
+      if (fetchNavigationMenu(group.getGroupId()) != null
+          || Instant.now().isBefore(retryInitializationAfter)) {
+        return;
+      }
+      retryInitializationAfter = Instant.now().plus(RETRY_INITIALIZATION_AFTER);
+      log.warn(
+          "Navigation menu " + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE + " missing, initializing");
+      var siteNavigationMenu = initNavigationMenu();
+      if (siteNavigationMenu != null) {
+        initMainCategoryMenuItems(siteNavigationMenu);
+      }
+    }
+  }
+
+  private SiteNavigationMenu fetchNavigationMenu(long groupId) {
+    return siteNavigationMenuLocalService.fetchSiteNavigationMenuByExternalReferenceCode(
+        NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE, groupId);
+  }
+
+  // A missing menu does not prevent the navigation API from starting, it only returns no navigation
+  private SiteNavigationMenu initNavigationMenu() {
+    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    try {
+      var adminUser = AdminUtil.getAdminUser(group.getCompanyId());
+      return RunAsUtil.callAs(
+          adminUser, () -> getOrCreateNavigationMenu(group, adminUser.getUserId()));
+    } catch (Exception e) {
+      log.error("Failed to initialize the navigation menu", e);
+      return null;
+    }
+  }
+
+  private SiteNavigationMenuItem fetchMenuItem(String externalReferenceCode, long groupId) {
+    return siteNavigationMenuItemLocalService.fetchSiteNavigationMenuItemByExternalReferenceCode(
+        externalReferenceCode, groupId);
+  }
+
+  // The startup, the first request and the import may create the menu and its managed items at the
+  // same time, so they are created under the lock of this service
+  private synchronized SiteNavigationMenu getOrCreateNavigationMenu(Group group, long userId)
+      throws PortalException {
+    var groupId = group.getGroupId();
+    var siteNavigationMenu =
+        siteNavigationMenuLocalService.fetchSiteNavigationMenuByExternalReferenceCode(
+            NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE, groupId);
+    if (siteNavigationMenu != null) {
+      return siteNavigationMenu;
+    }
+
+    var siteNavigationMenus = siteNavigationMenuLocalService.getSiteNavigationMenus(groupId);
+    if (!siteNavigationMenus.isEmpty()) {
+      siteNavigationMenu = adoptNavigationMenu(group, siteNavigationMenus);
+      if (siteNavigationMenu != null) {
+        return siteNavigationMenu;
+      }
+    }
+
+    siteNavigationMenu =
+        siteNavigationMenuLocalService.addSiteNavigationMenu(
+            NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE,
+            userId,
+            groupId,
+            NAVIGATION_MENU_NAME,
+            createServiceContext(group, userId));
+    log.info("Created navigation menu " + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE);
+    return siteNavigationMenu;
+  }
+
+  /**
+   * Takes over the menu the public navigation has shown so far: the first one visible to the guest.
+   * If there is none, e.g. only menus of the admin UI, none is taken over.
+   */
+  private SiteNavigationMenu adoptNavigationMenu(
+      Group group, List<SiteNavigationMenu> siteNavigationMenus) throws PortalException {
+    var guestSiteNavigationMenus =
+        RunAsUtil.callAsGuest(
+            group.getCompanyId(),
+            () -> siteNavigationMenuService.getSiteNavigationMenus(group.getGroupId()));
+    if (guestSiteNavigationMenus.isEmpty()) {
+      return null;
+    }
+    var siteNavigationMenu = guestSiteNavigationMenus.getFirst();
+    if (siteNavigationMenus.size() > 1) {
+      log.warn(
+          "The site has "
+              + siteNavigationMenus.size()
+              + " navigation menus, using "
+              + siteNavigationMenu.getName()
+              + " ("
+              + siteNavigationMenu.getSiteNavigationMenuId()
+              + ") as the navigation");
+    }
+
+    var previousExternalReferenceCode = siteNavigationMenu.getExternalReferenceCode();
+    siteNavigationMenu.setExternalReferenceCode(NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE);
+    siteNavigationMenu =
+        siteNavigationMenuLocalService.updateSiteNavigationMenu(siteNavigationMenu);
+    log.info(
+        "Took over navigation menu "
+            + siteNavigationMenu.getName()
+            + " ("
+            + siteNavigationMenu.getSiteNavigationMenuId()
+            + "), changed its external reference code from "
+            + previousExternalReferenceCode
+            + " to "
+            + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE);
+    return siteNavigationMenu;
+  }
+
+  private static ServiceContext createServiceContext(Group group, long userId) {
+    var serviceContext = new ServiceContext();
+    serviceContext.setCompanyId(group.getCompanyId());
+    serviceContext.setScopeGroupId(group.getGroupId());
+    serviceContext.setUserId(userId);
+    // The public navigation is read with the guest's permissions
+    serviceContext.setAddGroupPermissions(true);
+    serviceContext.setAddGuestPermissions(true);
+    return serviceContext;
+  }
+
+  @Override
+  public synchronized SiteNavigationMenuItem getOrCreateStudyProgramsParentMenuItem(
+      AssetCategory mainCategory, AssetCategory studyProgramsCategory)
+      throws MultipleStudyProgramListingMenuItemExpection, NavigationMenuItemPersistenceException {
+    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    try {
+      var userId = AdminUtil.getAdminUser(group.getCompanyId()).getUserId();
+      var siteNavigationMenu = getOrCreateNavigationMenu(group, userId);
+
+      var listingMenuItem =
+          fetchMenuItem(
+              STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE, group.getGroupId());
+      if (listingMenuItem == null) {
+        listingMenuItem = takeOverListingMenuItem(siteNavigationMenu);
+      }
+      if (listingMenuItem != null) {
+        return checkListingMenuItem(listingMenuItem, siteNavigationMenu);
+      }
+
+      var serviceContext = createServiceContext(group, userId);
+      var mainMenuItem =
+          getOrCreateMainCategoryMenuItem(siteNavigationMenu, mainCategory, serviceContext);
+      return addCategoryMenuItem(
+          STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE,
+          siteNavigationMenu,
+          mainMenuItem.getSiteNavigationMenuItemId(),
+          studyProgramsCategory,
+          TYPE_STUDY_PROGRAMS_LISTING,
+          serviceContext);
+    } catch (PortalException e) {
+      throw new NavigationMenuItemPersistenceException(
+          "Failed to create the " + TYPE_STUDY_PROGRAMS_LISTING + " menu item", e);
+    }
+  }
+
+  // A menu item created by hand is recognized by its type
+  private SiteNavigationMenuItem takeOverListingMenuItem(SiteNavigationMenu siteNavigationMenu)
+      throws MultipleStudyProgramListingMenuItemExpection {
+    var listingMenuItems =
+        getMenuItems(siteNavigationMenu).stream()
+            .filter(
+                menuItem -> TYPE_STUDY_PROGRAMS_LISTING.equals(getTypeCustomFieldValue(menuItem)))
+            .toList();
+    if (listingMenuItems.size() > 1) {
+      throw new MultipleStudyProgramListingMenuItemExpection(
+          "Multiple " + TYPE_STUDY_PROGRAMS_LISTING + " menu items found");
+    }
+    return listingMenuItems.isEmpty()
+        ? null
+        : takeOverMenuItem(
+            listingMenuItems.getFirst(), STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE);
+  }
+
+  private SiteNavigationMenuItem checkListingMenuItem(
+      SiteNavigationMenuItem menuItem, SiteNavigationMenu siteNavigationMenu)
+      throws NavigationMenuItemPersistenceException {
+    if (menuItem.getSiteNavigationMenuId() != siteNavigationMenu.getSiteNavigationMenuId()) {
+      throw new NavigationMenuItemPersistenceException(
+          "Menu item "
+              + STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+              + " ("
+              + menuItem.getSiteNavigationMenuItemId()
+              + ") is not in the navigation menu "
+              + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE,
+          null);
+    }
+    // An unset value reads as the default of the column, the first option of the list
+    var typeValue =
+        ExpandoValueLocalServiceUtil.getValue(
+            menuItem.getCompanyId(),
+            SiteNavigationMenuItem.class.getName(),
+            ExpandoTableConstants.DEFAULT_TABLE_NAME,
+            TYPE_CUSTOM_FIELD_NAME,
+            menuItem.getSiteNavigationMenuItemId());
+    if (typeValue == null) {
+      menuItem
+          .getExpandoBridge()
+          .setAttribute(TYPE_CUSTOM_FIELD_NAME, new String[] {TYPE_STUDY_PROGRAMS_LISTING}, false);
+      log.warn(
+          "Set the missing type of menu item "
+              + STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+              + " to "
+              + TYPE_STUDY_PROGRAMS_LISTING);
+      return menuItem;
+    }
+    var type = getTypeCustomFieldValue(menuItem);
+    if (TYPE_STUDY_PROGRAMS_LISTING.equals(type)) {
+      return menuItem;
+    }
+    throw new NavigationMenuItemPersistenceException(
+        "Menu item "
+            + STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+            + " ("
+            + menuItem.getSiteNavigationMenuItemId()
+            + ") has the type "
+            + type
+            + ": set its type back to "
+            + TYPE_STUDY_PROGRAMS_LISTING
+            + " or delete it",
+        null);
+  }
+
+  private boolean isMenuItemOfCategory(
+      SiteNavigationMenuItem siteNavigationMenuItem, AssetCategory assetCategory) {
+    if (getSiteNavigationMenuItemType(siteNavigationMenuItem)
+        != SiteNavigationMenuItemType.ASSET_CATEGORY) {
+      return false;
+    }
+    var resolved =
+        resolveAssetCategory(
+            getUnicodeProperties(siteNavigationMenuItem), siteNavigationMenuItem.getGroupId());
+    return resolved != null && resolved.getCategoryId() == assetCategory.getCategoryId();
+  }
+
+  private SiteNavigationMenuItem addCategoryMenuItem(
+      String externalReferenceCode,
+      SiteNavigationMenu siteNavigationMenu,
+      long parentSiteNavigationMenuItemId,
+      AssetCategory assetCategory,
+      String type,
+      ServiceContext serviceContext)
+      throws PortalException {
+    var typeSettings =
+        UnicodePropertiesBuilder.create(true)
+            .put("classNameId", String.valueOf(PortalUtil.getClassNameId(AssetCategory.class)))
+            .put(PROPERTY_CLASS_PK, String.valueOf(assetCategory.getCategoryId()))
+            .put(PROPERTY_EXTERNAL_REFERENCE_CODE, assetCategory.getExternalReferenceCode())
+            .put(PROPERTY_TITLE, assetCategory.getTitle(LocaleUtil.getDefault()))
+            .put(
+                "type",
+                ResourceActionsUtil.getModelResource(
+                    LocaleUtil.getDefault(), AssetCategory.class.getName()))
+            .put("useCustomName", false)
+            .buildString();
+
+    var siteNavigationMenuItem =
+        siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
+            externalReferenceCode,
+            serviceContext.getUserId(),
+            siteNavigationMenu.getGroupId(),
+            siteNavigationMenu.getSiteNavigationMenuId(),
+            parentSiteNavigationMenuItemId,
+            AssetCategory.class.getName(),
+            typeSettings,
+            serviceContext);
+    siteNavigationMenuItem
+        .getExpandoBridge()
+        .setAttribute(TYPE_CUSTOM_FIELD_NAME, new String[] {type}, false);
+    log.info(
+        "Created "
+            + type
+            + " menu item "
+            + externalReferenceCode
+            + " for category "
+            + assetCategory.getExternalReferenceCode());
+    return siteNavigationMenuItem;
   }
 
   @Override
   public void addOrUpdateStudyProgramNavigationMenuItem(
       JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
-      throws StudyProgramListingMissingException,
-          MultipleStudyProgramListingMenuItemExpection,
-          NavigationMenuItemPersistenceException {
+      throws StudyProgramListingMissingException, NavigationMenuItemPersistenceException {
     var studyProgramsParentMenuItem = getStudyProgramsParentMenuItem();
     var groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     var typeSettings =
@@ -393,31 +801,18 @@ public class NavigationServiceImpl implements NavigationService {
   }
 
   public SiteNavigationMenuItem getStudyProgramsParentMenuItem()
-      throws StudyProgramListingMissingException, MultipleStudyProgramListingMenuItemExpection {
-    var siteNavigationMenus =
-        siteNavigationMenuService.getSiteNavigationMenus(
+      throws StudyProgramListingMissingException {
+    var menuItem =
+        fetchMenuItem(
+            STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE,
             jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
-    if (siteNavigationMenus.isEmpty()) {
-      throw new StudyProgramListingMissingException("No site navigation menus found");
-    }
-    var siteNavigationMenu = siteNavigationMenus.getFirst();
-    var menuItems =
-        siteNavigationMenuItemLocalService.getSiteNavigationMenuItems(
-            siteNavigationMenu.getSiteNavigationMenuId(),
-            SiteNavigationMenuItemOrderComparator.getInstance(true));
-
-    var studyProgramsListingMenuItems =
-        menuItems.stream()
-            .filter(menuItem -> "StudyProgramsListing".equals(getTypeCustomFieldValue(menuItem)))
-            .toList();
-    if (studyProgramsListingMenuItems.isEmpty()) {
+    if (menuItem == null) {
       throw new StudyProgramListingMissingException(
-          "No StudyProgramsListing parent menu item found");
-    } else if (studyProgramsListingMenuItems.size() > 1) {
-      throw new MultipleStudyProgramListingMenuItemExpection(
-          "Multiple StudyProgramsListing parent menu item found");
+          "No menu item "
+              + STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+              + ", it is created or taken over by the import");
     }
-    return studyProgramsListingMenuItems.getFirst();
+    return menuItem;
   }
 
   private String getTypeCustomFieldValue(SiteNavigationMenuItem siteNavigationMenuItem) {
@@ -542,22 +937,27 @@ public class NavigationServiceImpl implements NavigationService {
     if (type != SiteNavigationMenuItemType.ASSET_CATEGORY) {
       return null;
     }
-    var categoryId = GetterUtil.getLong(unicodeProperties.get(PROPERTY_CLASS_PK));
-    AssetCategory assetCategory;
-    if (categoryId > 0) {
-      assetCategory = assetCategoryLocalService.fetchAssetCategory(categoryId);
-    } else {
-      var externalReferenceCode = unicodeProperties.get(PROPERTY_EXTERNAL_REFERENCE_CODE);
-      if (Validator.isNull(externalReferenceCode)) {
-        return null;
-      }
-      assetCategory =
-          assetCategoryLocalService.fetchAssetCategoryByExternalReferenceCode(
-              externalReferenceCode, groupId);
-    }
+    var assetCategory = resolveAssetCategory(unicodeProperties, groupId);
     return PermissionUtil.canView(assetCategoryModelResourcePermission, assetCategory)
         ? assetCategory
         : null;
+  }
+
+  /**
+   * The category a menu item refers to, by classPK or, if created in the DXP 2026 UI, by external
+   * reference code, without checking the permissions.
+   */
+  private AssetCategory resolveAssetCategory(UnicodeProperties unicodeProperties, long groupId) {
+    var categoryId = GetterUtil.getLong(unicodeProperties.get(PROPERTY_CLASS_PK));
+    if (categoryId > 0) {
+      return assetCategoryLocalService.fetchAssetCategory(categoryId);
+    }
+    var externalReferenceCode = unicodeProperties.get(PROPERTY_EXTERNAL_REFERENCE_CODE);
+    if (Validator.isNull(externalReferenceCode)) {
+      return null;
+    }
+    return assetCategoryLocalService.fetchAssetCategoryByExternalReferenceCode(
+        externalReferenceCode, groupId);
   }
 
   // Only the latest approved version is shown: a newer draft must not hide a published article

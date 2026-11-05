@@ -10,26 +10,26 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.service;
 
 import com.liferay.asset.kernel.model.AssetCategory;
-import com.liferay.asset.kernel.model.AssetCategoryConstants;
-import com.liferay.asset.kernel.model.AssetVocabulary;
-import com.liferay.asset.kernel.model.AssetVocabularyConstants;
 import com.liferay.asset.kernel.service.AssetCategoryLocalService;
-import com.liferay.asset.kernel.service.AssetVocabularyLocalService;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
-import com.liferay.portal.kernel.security.auth.GuestOrUserUtil;
+import com.liferay.portal.kernel.module.framework.ModuleServiceLifecycle;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.vulcan.util.LocalizedMapUtil;
-import com.liferay.portlet.asset.util.AssetVocabularySettingsHelper;
+import fi.okm.jod.ohjaaja.cms.navigation.service.MainCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.constants.StudyProgramImporterConstants;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
+import fi.okm.jod.ohjaaja.cms.util.AdminUtil;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import fi.okm.jod.ohjaaja.cms.util.TakeOverUtil;
+import fi.okm.jod.ohjaaja.cms.util.VocabularyInitializer;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -44,21 +44,46 @@ public class StudyProgramCategoryService {
   private static final String LANGUAGE_ID_EN_US = "en_US";
   private static final String LANGUAGE_ID_SV_SE = "sv_SE";
 
-  @Reference private AssetVocabularyLocalService assetVocabularyLocalService;
+  private static final List<String> STUDY_PROGRAM_CATEGORY_TITLES =
+      List.of(
+          StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_FINNISH_TITLE,
+          StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_SWEDISH_TITLE,
+          StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_ENGLISH_TITLE);
+
   @Reference private AssetCategoryLocalService assetCategoryLocalService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
-  @Reference private Portal portal;
   @Reference private TagsService tagsService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Reference private Portal portal;
+  @Reference private MainCategoryService mainCategoryService;
+  @Reference private VocabularyInitializer vocabularyInitializer;
+
+  // The default company and its admin user must exist
+  @Reference(target = ModuleServiceLifecycle.PORTAL_INITIALIZED)
+  private ModuleServiceLifecycle portalInitialized;
 
   @Activate
   protected void activate() {
     log.info("Study Program Importer Portlet activated");
-    initializeStudyProgramTag();
+    initialize();
+  }
+
+  /**
+   * Creates or takes over the study program tag and category. Run on activation and before each
+   * import, so that a fixed cause of a failure, e.g. a renamed main category, does not need a
+   * restart. Failures are only logged, the import checks the result.
+   */
+  public void initialize() {
+    // Separately, so that a missing tag vocabulary does not prevent the category
+    try {
+      initializeStudyProgramTag();
+    } catch (RuntimeException e) {
+      log.error("Failed to initialize the study program tag", e);
+    }
     try {
       initializeStudyProgramCategory();
-    } catch (PortalException e) {
-      log.error("Failed to initialize study program category", e);
+    } catch (PortalException | RuntimeException e) {
+      log.error("Failed to initialize the study program category", e);
     }
   }
 
@@ -84,6 +109,11 @@ public class StudyProgramCategoryService {
     journalArticleLocalService.updateAsset(userId, article, categoryIds, null, null, 0.0);
   }
 
+  /** Whether the study program tag exists, which is added to every study program. */
+  public boolean hasStudyProgramTagCategory() {
+    return getStudyProgramTagCategory() != null;
+  }
+
   private JodTaxonomyCategoryDto getStudyProgramTagCategory() {
     var tagCategories =
         tagsService.getJodTaxonomyCategories(
@@ -98,37 +128,25 @@ public class StudyProgramCategoryService {
         .orElse(null);
   }
 
-  private AssetCategory getStudyProgramCategory() {
-    return getStudyProgramCategoryVocabulary().getCategories().stream()
-        .filter(
-            assetCategory ->
-                StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE.equals(
-                    assetCategory.getExternalReferenceCode()))
-        .findFirst()
-        .orElse(null);
+  /** The category of the study programs, or null if it has not been initialized. */
+  public AssetCategory getStudyProgramCategory() {
+    var vocabulary = mainCategoryService.fetchCategoryVocabulary();
+    if (vocabulary == null) {
+      return null;
+    }
+    var category =
+        assetCategoryLocalService.fetchAssetCategoryByExternalReferenceCode(
+            StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE,
+            vocabulary.getGroupId());
+    return category != null && category.getVocabularyId() == vocabulary.getVocabularyId()
+        ? category
+        : null;
   }
 
-  private AssetCategory getStudyProgramParentCategory() {
-    return getStudyProgramCategoryVocabulary().getCategories().stream()
-        .filter(
-            assetCategory ->
-                StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE
-                    .equals(assetCategory.getExternalReferenceCode()))
-        .findFirst()
-        .orElse(null);
-  }
-
-  private AssetVocabulary getStudyProgramCategoryVocabulary() {
-    var vocabularies =
-        assetVocabularyLocalService.getCompanyVocabularies(portal.getDefaultCompanyId());
-    return vocabularies.stream()
-        .filter(
-            vocabulary ->
-                StudyProgramImporterConstants
-                    .STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE
-                    .equals(vocabulary.getExternalReferenceCode()))
-        .findFirst()
-        .orElse(null);
+  /** The main category of the study programs, or null if it has not been initialized. */
+  public AssetCategory getStudyProgramParentCategory() {
+    return mainCategoryService.fetchMainCategory(
+        MainCategoryService.PROFESSIONAL_DEVELOPMENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
   }
 
   private void initializeStudyProgramTag() {
@@ -164,153 +182,79 @@ public class StudyProgramCategoryService {
     }
   }
 
+  // The vocabulary and the main category are managed by the navigation, the study program
+  // category under the main category here
   private void initializeStudyProgramCategory() throws PortalException {
-
-    var studyProgramVocabulary = getStudyProgramCategoryVocabulary();
-
-    if (studyProgramVocabulary == null) {
-      // Try to fetch the existing vocabulary by title
-      var vocabularies =
-          assetVocabularyLocalService.getCompanyVocabularies(portal.getDefaultCompanyId());
-
-      studyProgramVocabulary =
-          vocabularies.stream()
-              .filter(
-                  vocabulary ->
-                      StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE
-                          .equals(vocabulary.getTitle(LANGUAGE_ID_FI_FI)))
-              .findFirst()
-              .orElse(null);
-    }
-
-    if (studyProgramVocabulary == null) {
-      studyProgramVocabulary = createStudyProgramVocabulary();
-      log.info("Created studyProgramVocabulary: " + studyProgramVocabulary.getVocabularyId());
-    }
-
-    // Ensure the vocabulary has the correct external reference code
-    studyProgramVocabulary.setExternalReferenceCode(
-        StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE);
-
-    assetVocabularyLocalService.updateAssetVocabulary(studyProgramVocabulary);
-    assetVocabularyLocalService.addVocabularyResources(studyProgramVocabulary, true, true);
+    var parentCategory =
+        mainCategoryService.initMainCategories().stream()
+            .filter(
+                mainCategory ->
+                    MainCategoryService.PROFESSIONAL_DEVELOPMENT_CATEGORY_EXTERNAL_REFERENCE_CODE
+                        .equals(mainCategory.getExternalReferenceCode()))
+            .findFirst()
+            .orElseThrow(
+                () ->
+                    new PortalException(
+                        "Main category "
+                            + MainCategoryService
+                                .PROFESSIONAL_DEVELOPMENT_CATEGORY_EXTERNAL_REFERENCE_CODE
+                            + " not found, see the log of the main categories"));
+    var vocabulary = mainCategoryService.fetchCategoryVocabulary();
 
     var studyProgramCategory = getStudyProgramCategory();
-    var studyProgramParentCategory = getStudyProgramParentCategory();
-
     if (studyProgramCategory == null) {
       // Try to fetch the existing category by title
       studyProgramCategory =
-          studyProgramVocabulary.getCategories().stream()
+          vocabulary.getCategories().stream()
               .filter(
                   assetCategory ->
-                      StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_FINNISH_TITLE.equals(
-                          assetCategory.getTitle(LANGUAGE_ID_FI_FI)))
+                      TakeOverUtil.hasAnyTitle(
+                          assetCategory.getTitleMap(), STUDY_PROGRAM_CATEGORY_TITLES))
               .findFirst()
               .orElse(null);
     }
-    if (studyProgramParentCategory == null) {
-      // Try to fetch the existing parent category by title
-      studyProgramParentCategory =
-          studyProgramVocabulary.getCategories().stream()
-              .filter(
-                  assetCategory ->
-                      StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE
-                          .equals(assetCategory.getTitle(LANGUAGE_ID_FI_FI)))
-              .findFirst()
-              .orElse(null);
-    }
-
-    if (studyProgramParentCategory == null) {
-      studyProgramParentCategory =
-          createStudyProgramParentCategory(studyProgramVocabulary.getVocabularyId());
-    }
-    // Ensure the parent category has the correct external reference code
-    studyProgramParentCategory.setExternalReferenceCode(
-        StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
-    assetCategoryLocalService.updateAssetCategory(studyProgramParentCategory);
-    assetCategoryLocalService.addCategoryResources(studyProgramParentCategory, true, true);
 
     if (studyProgramCategory == null) {
-      studyProgramCategory =
-          createStudyProgramCategory(
-              studyProgramParentCategory.getCategoryId(), studyProgramVocabulary.getVocabularyId());
+      createStudyProgramCategory(
+          parentCategory.getCategoryId(), vocabulary.getVocabularyId(), vocabulary.getGroupId());
+      return;
     }
 
-    // Ensure the category has the correct external reference code
-    studyProgramCategory.setExternalReferenceCode(
-        StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE);
-    studyProgramCategory.setParentCategoryId(studyProgramParentCategory.getCategoryId());
-    assetCategoryLocalService.updateAssetCategory(studyProgramCategory);
-    assetCategoryLocalService.addCategoryResources(studyProgramCategory, true, true);
+    if (!StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE.equals(
+        studyProgramCategory.getExternalReferenceCode())) {
+      studyProgramCategory.setExternalReferenceCode(
+          StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE);
+      studyProgramCategory = assetCategoryLocalService.updateAssetCategory(studyProgramCategory);
+      log.info("Took over study program category " + studyProgramCategory.getCategoryId());
+    }
+    // moveCategory also updates the tree path, which the category queries use
+    if (studyProgramCategory.getParentCategoryId() != parentCategory.getCategoryId()) {
+      assetCategoryLocalService.moveCategory(
+          studyProgramCategory.getCategoryId(),
+          parentCategory.getCategoryId(),
+          vocabulary.getVocabularyId(),
+          new ServiceContext());
+      log.info("Moved study program category under " + parentCategory.getExternalReferenceCode());
+    }
+    vocabularyInitializer.ensureGuestViewPermission(
+        studyProgramCategory.getCompanyId(),
+        AssetCategory.class.getName(),
+        studyProgramCategory.getCategoryId());
   }
 
-  private AssetVocabulary createStudyProgramVocabulary() throws PortalException {
-    log.info(
-        "Creating new study program category vocabulary: "
-            + StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE);
-    var user = GuestOrUserUtil.getGuestOrUser(portal.getDefaultCompanyId());
-    var assetVocabularySettingsHelper = new AssetVocabularySettingsHelper();
-    assetVocabularySettingsHelper.setMultiValued(true);
-    assetVocabularySettingsHelper.setClassNameIdsAndClassTypePKs(
-        new long[] {portal.getClassNameId(JournalArticle.class.getName())},
-        new long[] {AssetCategoryConstants.ALL_CLASS_TYPE_PK},
-        new boolean[] {false});
-
-    return assetVocabularyLocalService.addVocabulary(
-        StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_EXTERNAL_REFERENCE_CODE,
-        user.getUserId(),
-        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
-        "category",
-        null,
-        LocalizedMapUtil.getLocalizedMap(
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_FINNISH_TITLE,
-                LANGUAGE_ID_EN_US,
-                StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_ENGLISH_TITLE,
-                LANGUAGE_ID_SV_SE,
-                StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_VOCABULARY_SWEDISH_TITLE)),
-        null,
-        assetVocabularySettingsHelper.toString(),
-        AssetVocabularyConstants.VISIBILITY_TYPE_PUBLIC,
-        new ServiceContext());
-  }
-
-  private AssetCategory createStudyProgramParentCategory(Long vocabularyId) throws PortalException {
-    log.info(
-        "Creating new study program parent category: "
-            + StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE);
-    var user = GuestOrUserUtil.getGuestOrUser(portal.getDefaultCompanyId());
-    return assetCategoryLocalService.addCategory(
-        StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_EXTERNAL_REFERENCE_CODE,
-        user.getUserId(),
-        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
-        0,
-        LocalizedMapUtil.getLocalizedMap(
-            Map.of(
-                LANGUAGE_ID_FI_FI,
-                StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_FINNISH_TITLE,
-                LANGUAGE_ID_EN_US,
-                StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_ENGLISH_TITLE,
-                LANGUAGE_ID_SV_SE,
-                StudyProgramImporterConstants.STUDY_PROGRAM_PARENT_CATEGORY_SWEDISH_TITLE)),
-        Map.of(),
-        vocabularyId,
-        null,
-        new ServiceContext());
-  }
-
-  private AssetCategory createStudyProgramCategory(Long parentCategoryId, Long vocabularyId)
-      throws PortalException {
+  private AssetCategory createStudyProgramCategory(
+      long parentCategoryId, long vocabularyId, long groupId) throws PortalException {
     log.info(
         "Creating new study program category: "
             + StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_FINNISH_TITLE);
-    var user = GuestOrUserUtil.getGuestOrUser(portal.getDefaultCompanyId());
+    var user = AdminUtil.getAdminUser(portal.getDefaultCompanyId());
+    var serviceContext = new ServiceContext();
+    serviceContext.setAddGroupPermissions(true);
+    serviceContext.setAddGuestPermissions(true);
     return assetCategoryLocalService.addCategory(
         StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_EXTERNAL_REFERENCE_CODE,
         user.getUserId(),
-        jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId(),
+        groupId,
         parentCategoryId,
         LocalizedMapUtil.getLocalizedMap(
             Map.of(
@@ -323,6 +267,6 @@ public class StudyProgramCategoryService {
         Map.of(),
         vocabularyId,
         null,
-        new ServiceContext());
+        serviceContext);
   }
 }
