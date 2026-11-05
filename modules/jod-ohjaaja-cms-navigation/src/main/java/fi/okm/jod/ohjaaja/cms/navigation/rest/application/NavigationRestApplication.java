@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.rest.application;
 
+import com.liferay.portal.kernel.module.framework.ModuleServiceLifecycle;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -32,6 +33,10 @@ import org.osgi.service.jaxrs.whiteboard.JaxrsWhiteboardConstants;
 public class NavigationRestApplication extends Application {
 
   @Reference private NavigationService navigationService;
+
+  // The default company and its admin user must exist
+  @Reference(target = ModuleServiceLifecycle.PORTAL_INITIALIZED)
+  private ModuleServiceLifecycle portalInitialized;
 
   @Override
   public Set<Object> getSingletons() {

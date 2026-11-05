@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
+import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.counter.kernel.service.CounterLocalServiceUtil;
 import com.liferay.document.library.kernel.service.DLAppLocalServiceUtil;
 import com.liferay.document.library.kernel.service.DLTrashLocalServiceUtil;
@@ -33,19 +34,19 @@ import com.liferay.portal.kernel.test.util.ServiceContextTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PropsUtil;
+import com.liferay.portal.kernel.util.UnicodePropertiesBuilder;
 import com.liferay.portal.kernel.util.Validator;
 import com.liferay.portal.test.rule.ClearThreadLocalClassTestRule;
 import com.liferay.portal.test.rule.InjectTestRule;
 import com.liferay.portal.test.rule.UniqueStringRandomizerBumperClassTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
-import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
-import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.DeleteImportedStudyProgramsBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.background.task.ImportStudyProgramsBackgroundTaskExecutor;
 import fi.okm.jod.ohjaaja.cms.studyprogram.client.KonfoClient;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramBackgroundTaskService;
+import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramCategoryService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService.ArticleState;
@@ -111,8 +112,6 @@ public class StudyProgramImportIntegrationTest {
   private static ServiceRegistration<KonfoClient> mockServiceRegistration;
   private static MockKonfoClient mockKonfoClient;
   private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
-  private static long createdMenuId;
-  private static long createdMenuItemId;
 
   private static final List<String> allCreatedArticleIds = new ArrayList<>();
 
@@ -159,8 +158,6 @@ public class StudyProgramImportIntegrationTest {
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
-
-    ensureStudyProgramsListingMenuItem();
   }
 
   private static void reactivateImportExecutor() throws Exception {
@@ -186,69 +183,8 @@ public class StudyProgramImportIntegrationTest {
                     .isEmpty());
   }
 
-  /**
-   * The import requires a navigation menu item of type StudyProgramsListing to add the study
-   * programs under. The test image has no navigation, so one is created unless it already exists.
-   */
-  private static void ensureStudyProgramsListingMenuItem() throws Exception {
-    var navigationService = getService(NavigationService.class);
-    navigationService.initNavigation();
-    try {
-      navigationService.getStudyProgramsParentMenuItem();
-      return;
-    } catch (StudyProgramListingMissingException e) {
-      System.out.println("ℹ️  No StudyProgramsListing menu item, creating one: " + e.getMessage());
-    }
-
-    long groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
-    var serviceContext =
-        ServiceContextTestUtil.getServiceContext(groupId, TestPropsValues.getUserId());
-    var siteNavigationMenuLocalService = getService(SiteNavigationMenuLocalService.class);
-    var siteNavigationMenus = siteNavigationMenuLocalService.getSiteNavigationMenus(groupId);
-    long menuId;
-    if (siteNavigationMenus.isEmpty()) {
-      createdMenuId =
-          siteNavigationMenuLocalService
-              .addSiteNavigationMenu(
-                  "study-program-test-menu-" + System.currentTimeMillis(),
-                  TestPropsValues.getUserId(),
-                  groupId,
-                  "Study program test menu",
-                  serviceContext)
-              .getSiteNavigationMenuId();
-      menuId = createdMenuId;
-    } else {
-      menuId = siteNavigationMenus.getFirst().getSiteNavigationMenuId();
-    }
-
-    var menuItem =
-        getService(SiteNavigationMenuItemLocalService.class)
-            .addSiteNavigationMenuItem(
-                "study-program-test-listing-" + System.currentTimeMillis(),
-                TestPropsValues.getUserId(),
-                groupId,
-                menuId,
-                0,
-                "url",
-                "name=Koulutukset\nurl=/koulutukset\n",
-                serviceContext);
-    menuItem.getExpandoBridge().setAttribute("Type", new String[] {"StudyProgramsListing"}, false);
-    createdMenuItemId = menuItem.getSiteNavigationMenuItemId();
-
-    // Fails the setup if the menu item is still not found
-    navigationService.getStudyProgramsParentMenuItem();
-  }
-
   @AfterClass
-  public static void tearDownClass() throws Exception {
-    // Deleting the menu item or menu also deletes the study program menu items under it
-    if (createdMenuId > 0) {
-      getService(SiteNavigationMenuLocalService.class).deleteSiteNavigationMenu(createdMenuId);
-    } else if (createdMenuItemId > 0) {
-      getService(SiteNavigationMenuItemLocalService.class)
-          .deleteSiteNavigationMenuItem(createdMenuItemId);
-    }
-
+  public static void tearDownClass() {
     if (mockServiceRegistration != null) {
       mockServiceRegistration.unregister();
       System.out.println("✅ MockKonfoClient service unregistered");
@@ -395,6 +331,29 @@ public class StudyProgramImportIntegrationTest {
     Assert.assertTrue("Should have imported articles", finalCount >= initialCount);
 
     System.out.println("\n✅ Import test completed successfully!");
+  }
+
+  /** The test image has no navigation, as an empty environment, so the import creates it. */
+  @Test
+  public void shouldCreateStudyProgramsListingMenuItemForStudyProgramsCategory() throws Exception {
+    var oid = konfoClient.fetchStudyPrograms().getFirst().oid();
+    createdArticleIds.add(oid);
+
+    runImportAndWait();
+
+    var parentMenuItem = getService(NavigationService.class).getStudyProgramsParentMenuItem();
+    var categoryService = getService(StudyProgramCategoryService.class);
+    assertRefersToCategory(parentMenuItem, categoryService.getStudyProgramCategory());
+
+    var mainMenuItem =
+        getService(SiteNavigationMenuItemLocalService.class)
+            .getSiteNavigationMenuItem(parentMenuItem.getParentSiteNavigationMenuItemId());
+    assertRefersToCategory(mainMenuItem, categoryService.getStudyProgramParentCategory());
+
+    var menuItem = fetchStudyProgramMenuItem(oid);
+    Assert.assertNotNull("The study program should be added to the navigation", menuItem);
+    Assert.assertEquals(
+        parentMenuItem.getSiteNavigationMenuItemId(), menuItem.getParentSiteNavigationMenuItemId());
   }
 
   @Test
@@ -838,6 +797,20 @@ public class StudyProgramImportIntegrationTest {
         0);
 
     System.out.println("✅ Article kept version " + before.getVersion());
+  }
+
+  // As the navigation, by classPK or, for menu items created in the DXP 2026 UI, by the external
+  // reference code
+  private static void assertRefersToCategory(
+      SiteNavigationMenuItem menuItem, AssetCategory category) {
+    var typeSettings = UnicodePropertiesBuilder.fastLoad(menuItem.getTypeSettings()).build();
+    var classPK = typeSettings.get("classPK");
+    if (classPK != null) {
+      Assert.assertEquals(String.valueOf(category.getCategoryId()), classPK);
+    } else {
+      Assert.assertEquals(
+          category.getExternalReferenceCode(), typeSettings.get("externalReferenceCode"));
+    }
   }
 
   private static JournalArticle fetchStudyProgramArticle(String oid) {

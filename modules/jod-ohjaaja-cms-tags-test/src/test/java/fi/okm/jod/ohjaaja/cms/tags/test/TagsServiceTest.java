@@ -14,6 +14,7 @@ import com.liferay.asset.kernel.service.AssetVocabularyLocalService;
 import com.liferay.portal.kernel.model.ResourceConstants;
 import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.security.permission.ActionKeys;
+import com.liferay.portal.kernel.service.GroupLocalService;
 import com.liferay.portal.kernel.service.ResourcePermissionLocalService;
 import com.liferay.portal.kernel.service.RoleLocalService;
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
@@ -22,6 +23,7 @@ import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
+import fi.okm.jod.ohjaaja.cms.tags.exception.TagsServiceException;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
 import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
@@ -79,23 +81,132 @@ public class TagsServiceTest {
   @Test
   public void shouldGrantGuestViewPermissionOnTagVocabulary() throws Exception {
     // A guest can view a tag only if it can view the vocabulary
-    var tagVocabulary =
-        bundleContext
-            .getService(bundleContext.getServiceReference(AssetVocabularyLocalService.class))
-            .getAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID);
-    var guestRole =
-        bundleContext
-            .getService(bundleContext.getServiceReference(RoleLocalService.class))
-            .getRole(tagVocabulary.getCompanyId(), RoleConstants.GUEST);
+    assertGuestCanViewVocabulary(
+        getService(AssetVocabularyLocalService.class)
+            .getAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID));
+  }
 
+  @Test
+  public void shouldCreateTagVocabularyWhenMissing() throws Exception {
+    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
+    // Hides the vocabulary of the container from the service, as in an empty environment
+    var existingVocabulary = hideTagVocabulary(true);
+    AssetVocabulary createdVocabulary = null;
+
+    try {
+      tagsService.initTagVocabulary();
+
+      createdVocabulary =
+          assetVocabularyLocalService.fetchAssetVocabularyByExternalReferenceCode(
+              "jod-ohjaaja-cms-tags", TEST_GROUP_ID);
+      Assert.assertNotNull("The tag vocabulary should be created", createdVocabulary);
+      Assert.assertNotEquals(
+          existingVocabulary.getVocabularyId(), createdVocabulary.getVocabularyId());
+      Assert.assertEquals("Avainsanat", createdVocabulary.getTitle("fi_FI"));
+      Assert.assertTrue(createdVocabulary.isMultiValued());
+      assertGuestCanViewVocabulary(createdVocabulary);
+
+      // Nothing is created again
+      tagsService.initTagVocabulary();
+      Assert.assertEquals(
+          createdVocabulary.getVocabularyId(),
+          assetVocabularyLocalService
+              .getAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID)
+              .getVocabularyId());
+    } finally {
+      if (createdVocabulary != null) {
+        assetVocabularyLocalService.deleteVocabulary(createdVocabulary);
+      }
+      restoreTagVocabulary(existingVocabulary);
+    }
+  }
+
+  @Test
+  public void shouldTakeOverTagVocabularyWithoutExternalReferenceCode() throws Exception {
+    // Like a vocabulary created before it had a fixed external reference code
+    var existingVocabulary = hideTagVocabulary(false);
+
+    try {
+      tagsService.initTagVocabulary();
+
+      var takenOverVocabulary =
+          getService(AssetVocabularyLocalService.class)
+              .fetchAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID);
+      Assert.assertNotNull(takenOverVocabulary);
+      Assert.assertEquals(
+          existingVocabulary.getVocabularyId(), takenOverVocabulary.getVocabularyId());
+    } finally {
+      restoreTagVocabulary(existingVocabulary);
+    }
+  }
+
+  /** Changes the external reference code, and optionally the name, of the tag vocabulary. */
+  private static AssetVocabulary hideTagVocabulary(boolean rename) throws Exception {
+    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
+    var vocabulary =
+        assetVocabularyLocalService.getAssetVocabularyByExternalReferenceCode(
+            "jod-ohjaaja-cms-tags", TEST_GROUP_ID);
+    var suffix = System.currentTimeMillis();
+    vocabulary.setExternalReferenceCode("hidden-tags-" + suffix);
+    if (rename) {
+      // The vocabulary is also taken over by its name or title
+      vocabulary.setName("hidden-tags-" + suffix);
+      vocabulary.setTitleMap(Map.of(LocaleUtil.fromLanguageId("fi_FI"), "Piilotettu " + suffix));
+    }
+    return assetVocabularyLocalService.updateAssetVocabulary(vocabulary);
+  }
+
+  private static void restoreTagVocabulary(AssetVocabulary hiddenVocabulary) throws Exception {
+    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
+    // Fetched again: an updated vocabulary has a new MVCC version
+    var vocabulary =
+        assetVocabularyLocalService.getAssetVocabulary(hiddenVocabulary.getVocabularyId());
+    vocabulary.setExternalReferenceCode("jod-ohjaaja-cms-tags");
+    vocabulary.setName("tags");
+    vocabulary.setTitleMap(
+        Map.of(
+            LocaleUtil.fromLanguageId("fi_FI"), "Avainsanat",
+            LocaleUtil.fromLanguageId("en_US"), "Tags",
+            LocaleUtil.fromLanguageId("sv_SE"), "Taggar"));
+    assetVocabularyLocalService.updateAssetVocabulary(vocabulary);
+  }
+
+  @Test
+  public void shouldReturnNoTagsForSiteWithoutTagVocabulary() throws Exception {
+    Assert.assertTrue(tagsService.getJodTaxonomyCategories(getCompanyGroupId()).isEmpty());
+  }
+
+  @Test
+  public void shouldNameMissingTagVocabularyWhenAddingTag() throws Exception {
+    var companyGroupId = getCompanyGroupId();
+
+    var exception =
+        Assert.assertThrows(
+            TagsServiceException.class,
+            () ->
+                tagsService.addOrUpdateJodTaxonomyCategory(
+                    null, "test-no-vocabulary", "Test", Map.of("fi_FI", "Testi"), companyGroupId));
+
+    Assert.assertTrue(
+        exception.getMessage(), exception.getMessage().contains("jod-ohjaaja-cms-tags"));
+  }
+
+  private static long getCompanyGroupId() throws Exception {
+    return getService(GroupLocalService.class)
+        .getCompanyGroup(TestPropsValues.getCompanyId())
+        .getGroupId();
+  }
+
+  private static void assertGuestCanViewVocabulary(AssetVocabulary vocabulary) throws Exception {
+    var guestRole =
+        getService(RoleLocalService.class).getRole(vocabulary.getCompanyId(), RoleConstants.GUEST);
     var resourcePermission =
-        bundleContext
-            .getService(bundleContext.getServiceReference(ResourcePermissionLocalService.class))
+        getService(ResourcePermissionLocalService.class)
             .fetchResourcePermission(
-                tagVocabulary.getCompanyId(),
+                vocabulary.getCompanyId(),
                 AssetVocabulary.class.getName(),
                 ResourceConstants.SCOPE_INDIVIDUAL,
-                String.valueOf(tagVocabulary.getVocabularyId()),
+                String.valueOf(vocabulary.getVocabularyId()),
                 guestRole.getRoleId());
 
     Assert.assertNotNull(
@@ -103,6 +214,10 @@ public class TagsServiceTest {
     Assert.assertTrue(
         "The guest should be able to view the tag vocabulary",
         resourcePermission.hasActionId(ActionKeys.VIEW));
+  }
+
+  private static <T> T getService(Class<T> serviceClass) {
+    return bundleContext.getService(bundleContext.getServiceReference(serviceClass));
   }
 
   @Test

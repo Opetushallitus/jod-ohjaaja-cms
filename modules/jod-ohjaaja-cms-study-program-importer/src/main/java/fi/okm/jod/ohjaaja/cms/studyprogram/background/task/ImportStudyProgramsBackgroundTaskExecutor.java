@@ -104,8 +104,20 @@ public class ImportStudyProgramsBackgroundTaskExecutor
           BackgroundTaskConstants.STATUS_FAILED, "Failed to fetch or create DDM structure.");
     }
 
-    // Ensure the navigation menu item exists
-    navigationService.getStudyProgramsParentMenuItem();
+    // Idempotent, so that a failure on activation can be fixed without a restart
+    studyProgramCategoryService.initialize();
+    var mainCategory = studyProgramCategoryService.getStudyProgramParentCategory();
+    var studyProgramsCategory = studyProgramCategoryService.getStudyProgramCategory();
+    if (mainCategory == null
+        || studyProgramsCategory == null
+        || !studyProgramCategoryService.hasStudyProgramTagCategory()) {
+      log.error(
+          "Study program categories or tag not found, see the log of the importer activation");
+      return new BackgroundTaskResult(
+          BackgroundTaskConstants.STATUS_FAILED, "Study program categories or tag not found.");
+    }
+    // The study programs are added under this menu item, so it is created in an empty environment
+    navigationService.getOrCreateStudyProgramsParentMenuItem(mainCategory, studyProgramsCategory);
     studyProgramFingerprintService.initFingerprintField();
 
     var studyPrograms = konfoClient.fetchStudyPrograms();
