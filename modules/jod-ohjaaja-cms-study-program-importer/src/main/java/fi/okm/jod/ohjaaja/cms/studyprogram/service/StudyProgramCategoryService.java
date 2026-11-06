@@ -266,6 +266,7 @@ public class StudyProgramCategoryService {
                 StudyProgramImporterConstants.STUDY_PROGRAM_CATEGORY_SWEDISH_TITLE)),
         Map.of(),
         vocabularyId,
+        false,
         null,
         serviceContext);
   }

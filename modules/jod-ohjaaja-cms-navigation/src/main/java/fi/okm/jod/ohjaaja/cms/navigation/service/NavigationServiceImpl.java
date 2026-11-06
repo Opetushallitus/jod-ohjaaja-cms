@@ -654,7 +654,7 @@ public class NavigationServiceImpl implements NavigationService {
     }
     // An unset value reads as the default of the column, the first option of the list
     var typeValue =
-        ExpandoValueLocalServiceUtil.getValue(
+        ExpandoValueLocalServiceUtil.fetchValue(
             menuItem.getCompanyId(),
             SiteNavigationMenuItem.class.getName(),
             ExpandoTableConstants.DEFAULT_TABLE_NAME,

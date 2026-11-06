@@ -201,6 +201,7 @@ public class MainCategoryServiceImpl implements MainCategoryService {
             LocalizedMapUtil.getLocalizedMap(mainCategory.titles()),
             Map.of(),
             vocabulary.getVocabularyId(),
+            false,
             null,
             serviceContext);
     log.info("Created main category " + mainCategory.externalReferenceCode());

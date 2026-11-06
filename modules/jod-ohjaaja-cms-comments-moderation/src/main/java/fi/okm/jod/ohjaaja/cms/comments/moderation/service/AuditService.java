@@ -33,7 +33,7 @@ public class AuditService {
     try {
       User user = userLocalService.getUser(userId);
       AuditMessage auditMessage =
-          new AuditMessage(action, user.getCompanyId(), user.getUserId(), user.getFullName());
+          new AuditMessage(user.getCompanyId(), user.getUserId(), user.getFullName(), action);
       auditRouter.route(auditMessage);
     } catch (Exception e) {
       log.error("Audit failed for action " + action + " by user " + userId, e);

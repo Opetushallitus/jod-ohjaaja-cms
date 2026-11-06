@@ -156,7 +156,8 @@ public class StructureInitializerImpl implements StructureInitializer {
 
     var removedOrChangedFields = getRemovedOrChangedFields(desired, current);
     if (!removedOrChangedFields.isEmpty()) {
-      log.error(
+      // Not an error: the structure is left as it is on purpose, e.g. one made by hand locally
+      log.warn(
           "Not updating structure "
               + definition.externalReferenceCode()
               + ": the definition would remove or change the type of fields "
