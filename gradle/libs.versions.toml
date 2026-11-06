@@ -12,7 +12,7 @@ liferay-gradle-plugins = "16.1.206"
 #   curl -s "$B/com.liferay.portal.test/maven-metadata.xml"             | grep -oP '(?<=<version>)[^<]+' | tail -5
 #   curl -s "$B/com.liferay.portal.test.integration/maven-metadata.xml" | grep -oP '(?<=<version>)[^<]+' | tail -5
 # Newest published as of DXP 2026.q2.9 (verified, integration tests green):
-portal-test = "32.7.0"
+portal-test = "34.1.0"
 portal-test-integration = "6.0.36"
 
 # Build / quality
@@ -40,7 +40,8 @@ javax-validation = "2.0.1.Final"
 
 # App libraries
 jackson-datatype-jsr310 = "2.18.7"
-pdfbox = "2.0.27"
+# Provided at runtime by Liferay (com.liferay.shared.dependencies.pdfbox); keep aligned with the bundled version.
+pdfbox = "3.0.7"
 # Provided at runtime by Liferay (com.liferay.shared.dependencies.nimbusds); keep aligned with the bundled version.
 nimbus-jose-jwt = "10.4"
 

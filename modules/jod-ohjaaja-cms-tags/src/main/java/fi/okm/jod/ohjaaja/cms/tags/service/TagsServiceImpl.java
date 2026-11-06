@@ -132,6 +132,7 @@ public class TagsServiceImpl implements TagsService {
                 LocalizedMapUtil.getLocalizedMap(nameI18n),
                 Map.of(),
                 tagVocabulary.getVocabularyId(),
+                false,
                 null,
                 new ServiceContext());
         assetCategoryLocalService.addCategoryResources(assetCategory, true, true);

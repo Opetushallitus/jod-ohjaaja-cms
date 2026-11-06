@@ -258,7 +258,7 @@ public class StructureInitializerTest {
 
     try (var logCapture =
         LoggerTestUtil.configureLog4JLogger(
-            "fi.okm.jod.ohjaaja.cms.util.StructureInitializerImpl", LoggerTestUtil.ERROR)) {
+            "fi.okm.jod.ohjaaja.cms.util.StructureInitializerImpl", LoggerTestUtil.WARN)) {
       structureInitializer.initStructures();
 
       Assert.assertEquals(

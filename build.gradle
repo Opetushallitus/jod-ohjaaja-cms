@@ -4,6 +4,9 @@ plugins {
   alias(libs.plugins.spotless) apply false
 }
 
+// Filled by the integration test tasks when run through testWithDockerContainer
+def failedIntegrationTestModules = Collections.synchronizedList([])
+
 subprojects { subproject ->
   subproject.pluginManager.withPlugin('java') {
     subproject.apply plugin: 'com.diffplug.spotless'
@@ -225,6 +228,23 @@ gradle.projectsEvaluated {
   testTasks.each { task ->
     task.get().mustRunAfter ':waitForLiferayToStabilize'
   }
+
+  // In the full run, a failing module must not stop the rest of the modules from running.
+  // The failures are collected and testWithDockerContainer fails the build at the end.
+  gradle.taskGraph.whenReady { graph ->
+    if (graph.hasTask(':testWithDockerContainer')) {
+      testTasks.each { taskProvider ->
+        def task = taskProvider.get()
+        task.ignoreFailures = true
+        task.afterSuite { descriptor, result ->
+          if (descriptor.parent == null && result.failedTestCount > 0) {
+            failedIntegrationTestModules.add(
+                "${task.project.name}: ${result.failedTestCount} of ${result.testCount} tests failed")
+          }
+        }
+      }
+    }
+  }
   tasks.named('testWithDockerContainer').configure {
     dependsOn testTasks
     finalizedBy 'unifiedTestReport'
@@ -268,6 +288,11 @@ tasks.register('testWithDockerContainer') {
   }
 
   doLast {
+    if (!failedIntegrationTestModules.isEmpty()) {
+      throw new GradleException(
+          "Integration tests failed:\n  " + failedIntegrationTestModules.join('\n  ')
+              + "\nSee build/reports/unified-tests/index.html")
+    }
     println '\n================================================'
     println '✅ Docker Container Test Workflow COMPLETE'
     println '================================================'
