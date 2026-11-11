@@ -1,6 +1,9 @@
-// Shared dependencies and test config for modules/*-test projects.
+// Shared dependencies and the integrationTest task for modules/*-test projects.
 // The Liferay version is derived in the root project from gradle.properties
 // (liferay.workspace.product). There are deliberately no fallback versions.
+//
+// The tests use Liferay's Arquillian JUnit bridge, which only talks over loopback, so the test JVM
+// is started with "docker exec" inside the Liferay test container. See docs/INTEGRATION_TESTS.md.
 
 def dxpApiVersion = rootProject.jodLiferayArtifactVersion
 
@@ -11,8 +14,12 @@ repositories {
   }
 }
 
+configurations {
+  integrationTestLauncher
+}
+
 dependencies {
-  testImplementation project(':test:jod-cms-testrunner-client')
+  testImplementation libs.liferay.arquillian.bridge
 
   testImplementation libs.junit
 
@@ -28,27 +35,210 @@ dependencies {
   testImplementation libs.log4j.core
 
   testImplementation libs.osgi.core
-}
 
-test {
-  useJUnit()
-
-  jvmArgs = [
-      '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
-      '--add-opens=java.base/java.lang=ALL-UNNAMED',
-      '--add-opens=java.base/java.util=ALL-UNNAMED'
-  ]
-
-  testLogging {
-    events "passed", "skipped", "failed"
-    exceptionFormat "full"
-    showStandardStreams = true
-  }
-
-  systemProperty "jod.testrunner.url", System.getProperty("jod.testrunner.url", "http://localhost:8080")
+  integrationTestLauncher libs.junit.platform.console
+  integrationTestLauncher libs.junit.vintage.engine
 }
 
 java {
   sourceCompatibility = JavaVersion.VERSION_21
   targetCompatibility = JavaVersion.VERSION_21
+}
+
+// Gradle's own test JVM cannot reach Liferay's loopback, so the regular test task does nothing.
+// It does not compile the tests either: the pre-push hook runs "test" with --offline, and must not
+// need the integration test libraries in the local Gradle cache. testWithDockerContainer compiles them.
+tasks.named('test') {
+  enabled = false
+  testClassesDirs = files()
+  classpath = files()
+}
+
+def containerProjectDir = rootProject.jodContainerProjectDir
+def containerGradleHomeDir = rootProject.jodContainerGradleHomeDir
+
+def rootDirFile = rootProject.projectDir.canonicalFile
+def gradleHomeFile = gradle.gradleUserHomeDir.canonicalFile
+
+// Host path -> path inside the Liferay test container. dockerRunTestContainer (root build.gradle)
+// mounts only the project and the Gradle user home, so every classpath entry must live under one
+// of them.
+def toContainerPath = { File file ->
+  def path = file.canonicalFile.toPath()
+  def base
+  def mountPoint
+  if (path.startsWith(rootDirFile.toPath())) {
+    base = rootDirFile.toPath()
+    mountPoint = containerProjectDir
+  } else if (path.startsWith(gradleHomeFile.toPath())) {
+    base = gradleHomeFile.toPath()
+    mountPoint = containerGradleHomeDir
+  } else {
+    throw new GradleException("Integration test classpath entry is outside the project and the Gradle user home: ${file}")
+  }
+  def relative = base.relativize(path).collect { it.toString() }.join('/')
+  return relative.isEmpty() ? mountPoint : "${mountPoint}/${relative}"
+}
+
+// The bridge builds the test bundle with bnd in the test JVM's working directory: it bundles
+// "test-classes/integration" from there and reads bnd.bnd from there. A module adds its own bnd
+// instructions in integration-test.bnd, e.g. to embed a library that Liferay does not provide.
+// The directory lives under the root build dir on purpose: Liferay workspace treats any bnd.bnd
+// below modules/ as an OSGi module project.
+def bundleWorkDir = rootProject.layout.buildDirectory.dir("integration-test/${project.name}")
+def bundleTestClassesDir = bundleWorkDir.map { it.dir('test-classes/integration') }
+
+// -PintegrationTests=FooTest,BarTest runs only those test classes (simple names). The other *Test
+// classes are left out of the copy: the bridge waits for every *Test class it finds before it
+// uninstalls the test bundle, so they must not be visible at all. A module that holds none of the
+// selected classes is skipped.
+def selected = rootProject.jodSelectedIntegrationTests
+
+// Simple names of the *Test classes of this module, taken from the sources so that nothing needs
+// to be compiled. The root project checks -PintegrationTests against these. The source tree is
+// only walked when the property is given (null otherwise): this runs in every Gradle invocation.
+ext.jodIntegrationTestClasses = selected == null ? null :
+    sourceSets.test.allJava.matching { include '**/*Test.java' }.files.collect { it.name - '.java' } as Set
+
+def moduleSelected = selected == null || !selected.intersect(jodIntegrationTestClasses).isEmpty()
+
+def prepareIntegrationTestBundle = tasks.register('prepareIntegrationTestBundle', Sync) {
+  onlyIf('a selected integration test is in this module') { moduleSelected }
+  inputs.property('selectedTestClasses', selected?.sort()?.join(',') ?: '')
+  from(sourceSets.test.output.classesDirs) {
+    into 'test-classes/integration'
+    if (selected != null) {
+      exclude { details ->
+        def topLevelClass = details.name.replaceFirst(/(\$.*)?\.class$/, '')
+        !details.directory && topLevelClass.endsWith('Test') && !selected.contains(topLevelClass)
+      }
+    }
+  }
+  from('integration-test.bnd') {
+    rename { 'bnd.bnd' }
+  }
+  into bundleWorkDir
+}
+
+tasks.register('integrationTest', Exec) {
+  group = 'verification'
+  description = 'Runs the integration tests inside the running Liferay test container'
+
+  dependsOn prepareIntegrationTestBundle
+  onlyIf('a selected integration test is in this module') { moduleSelected }
+
+  // The copied (possibly filtered) test classes replace the compiled ones on the classpath, so the
+  // bridge and the console launcher see the same set of test classes.
+  def classpath = files(bundleTestClassesDir) +
+      (sourceSets.test.runtimeClasspath - sourceSets.test.output.classesDirs) +
+      configurations.integrationTestLauncher
+  def buildDir = layout.buildDirectory
+  def argsFile = buildDir.file('integration-test/java.args')
+  def reportsDir = buildDir.dir('test-results/integrationTest')
+  def runningInWorkflow = { gradle.taskGraph.hasTask(':testWithDockerContainer') }
+
+  // In the full run, a failing module must not stop the remaining modules: the failure is
+  // collected and testWithDockerContainer fails the build at the end.
+  def fail = { String reason ->
+    if (runningInWorkflow()) {
+      rootProject.jodFailedIntegrationTestModules.add("${project.name}: ${reason}")
+    } else {
+      throw new GradleException("Integration tests in ${project.name}: ${reason}")
+    }
+  }
+
+  inputs.files(classpath)
+  // No outputs on purpose: integration tests always run, the result depends on the container.
+
+  ignoreExitValue = true
+
+  // The test JVM is stopped inside the container by "timeout" (below). This is only the backstop
+  // for a "docker exec" that does not return even then.
+  def timeoutMinutes = rootProject.jodIntegrationTestTimeoutMinutes
+  timeout = java.time.Duration.ofMinutes(timeoutMinutes + 2)
+
+  doFirst {
+    def reports = reportsDir.get().asFile
+    project.delete(reports)
+
+    // "docker exec" against a missing container exits with 1 just like failing tests do, so the
+    // container is checked first.
+    def containerState = rootProject.jodTestContainerState()
+    if (containerState != 'running healthy') {
+      fail("the Liferay test container ${rootProject.jodTestContainerName} is ${containerState}"
+          + ' (start it with ./gradlew dockerBuildTestImage dockerRunTestContainer)')
+      throw new StopExecutionException()
+    }
+
+    reports.mkdirs()
+
+    def containerClasspath = classpath.files.findAll { it.exists() }.collect { toContainerPath(it) }
+    def javaArgs = [
+        // Liferay's test utilities (e.g. StringBundler) reflect into these JDK internals.
+        '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        // release.dxp.api registers a StAX provider whose dependencies are not on the classpath;
+        // JUnit's XML report writer must use the JDK's own implementation.
+        '-Djavax.xml.stream.XMLOutputFactory=com.sun.xml.internal.stream.XMLOutputFactoryImpl',
+        '-cp', containerClasspath.join(':'),
+        'org.junit.platform.console.ConsoleLauncher', 'execute',
+        '--disable-banner',
+        '--details=tree',
+        '--fail-if-no-tests',
+        // Liferay's Arquillian runner is a JUnit 4 runner, so the tests need the Vintage engine
+        // for as long as Liferay ships it that way. Its deprecation notice is just noise here.
+        '--config=junit.vintage.discovery.issue.reporting.enabled=false',
+        // Open Test Reporting XML (open-test-report.xml) next to the JUnit XML. The root
+        // project's integrationTestReport task merges these into one HTML report.
+        '--config=junit.platform.reporting.open.xml.enabled=true',
+        "--config=junit.platform.reporting.output.dir=${toContainerPath(reports)}",
+        '--scan-classpath', toContainerPath(bundleTestClassesDir.get().asFile),
+        '--reports-dir', toContainerPath(reports),
+    ]
+    def file = argsFile.get().asFile
+    file.parentFile.mkdirs()
+    file.text = javaArgs.collect { '"' + it.replace('\\', '\\\\').replace('"', '\\"') + '"' }.join('\n') + '\n'
+
+    def dockerArgs = ['docker', 'exec']
+    // Docker Engine on Linux would otherwise write the reports into the bind mount as the
+    // container's liferay user (uid 1000); Docker Desktop maps ownership itself.
+    if (org.gradle.internal.os.OperatingSystem.current().isLinux()) {
+      def uid = ['id', '-u'].execute().text.trim()
+      def gid = ['id', '-g'].execute().text.trim()
+      dockerArgs += ['--user', "${uid}:${gid}"]
+    }
+    dockerArgs += [
+        '-e', 'HOME=/tmp',
+        '-w', toContainerPath(bundleWorkDir.get().asFile),
+        rootProject.jodTestContainerName,
+        // SIGTERM at the limit, SIGKILL 30 seconds later. Exit code 124 or 137 (see doLast).
+        'timeout', '--kill-after=30', "${timeoutMinutes}m",
+        'java', "@${toContainerPath(file)}",
+    ]
+    commandLine dockerArgs
+  }
+
+  doLast {
+    // ConsoleLauncher exit codes: 0 all passed, 1 tests failed, 2 no tests found. Anything else
+    // means the test JVM did not get to run the tests (docker exec or launcher error).
+    switch (executionResult.get().exitValue) {
+      case 0:
+        break
+      case 1:
+        fail("tests failed (see ${reportsDir.get().asFile})")
+        break
+      case 2:
+        fail('no tests found')
+        break
+      case 124:
+        fail("the tests did not finish in ${timeoutMinutes} minutes and were stopped")
+        break
+      case 137:
+        fail("the test JVM was killed: it ignored the stop signal after ${timeoutMinutes} minutes, or the container ran out of memory")
+        break
+      default:
+        fail("the test JVM exited with code ${executionResult.get().exitValue} before running the tests (see the output above)")
+    }
+  }
 }

@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.counter.kernel.service.CounterLocalServiceUtil;
 import com.liferay.document.library.kernel.service.DLAppLocalServiceUtil;
@@ -37,6 +38,7 @@ import com.liferay.portal.kernel.util.PropsUtil;
 import com.liferay.portal.kernel.util.UnicodePropertiesBuilder;
 import com.liferay.portal.kernel.util.Validator;
 import com.liferay.portal.test.rule.ClearThreadLocalClassTestRule;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.InjectTestRule;
 import com.liferay.portal.test.rule.UniqueStringRandomizerBumperClassTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
@@ -51,7 +53,6 @@ import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFileService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramFingerprintService.ArticleState;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramService;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -73,11 +74,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.runtime.ServiceComponentRuntime;
 
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class StudyProgramImportIntegrationTest {
 
   @ClassRule @Rule
@@ -102,16 +102,26 @@ public class StudyProgramImportIntegrationTest {
   private static final String PLACEHOLDER_IMAGE_PATH =
       "/images/study_program_image_placeholder.png";
 
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static JournalArticleLocalService journalArticleLocalService;
+  @Inject private static NavigationService navigationService;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static ServiceComponentRuntime serviceComponentRuntime;
+  @Inject private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  @Inject private static StudyProgramBackgroundTaskService backgroundTaskService;
+  @Inject private static StudyProgramCategoryService categoryService;
+  @Inject private static StudyProgramFileService fileService;
+  @Inject private static StudyProgramFingerprintService fingerprintService;
+  @Inject private static StudyProgramService studyProgramService;
+
   private static BundleContext bundleContext;
   private static String originalKonfoUrl;
-  private static StudyProgramService studyProgramService;
-  private static JournalArticleLocalService journalArticleLocalService;
-  private static StudyProgramBackgroundTaskService backgroundTaskService;
+  // Looked up after MockKonfoClient is registered, not injected: static fields are injected before
+  // the mock is registered, and @Inject does not choose the service with the highest ranking
   private static KonfoClient konfoClient;
   private static PermissionChecker originalPermissionChecker;
   private static ServiceRegistration<KonfoClient> mockServiceRegistration;
   private static MockKonfoClient mockKonfoClient;
-  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
 
   private static final List<String> allCreatedArticleIds = new ArrayList<>();
 
@@ -140,28 +150,22 @@ public class StudyProgramImportIntegrationTest {
     Awaitility.await()
         .atMost(Duration.ofSeconds(5))
         .pollInterval(Duration.ofMillis(100))
-        .until(() -> getService(KonfoClient.class) instanceof MockKonfoClient);
+        .until(() -> getKonfoClient() instanceof MockKonfoClient);
     // The executor has a static reluctant reference to KonfoClient, so it keeps the real client
     // until it is activated again
     reactivateImportExecutor();
-    jodOhjaajaCmsUtil = getService(JodOhjaajaCmsUtil.class);
-    studyProgramService = getService(StudyProgramService.class);
-    journalArticleLocalService = getService(JournalArticleLocalService.class);
-    backgroundTaskService = getService(StudyProgramBackgroundTaskService.class);
-    konfoClient = getService(KonfoClient.class);
+    konfoClient = getKonfoClient();
 
     System.out.println("✅ KonfoClient type: " + konfoClient.getClass().getName());
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
 
-    var permissionCheckerFactory = getService(PermissionCheckerFactory.class);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
   }
 
   private static void reactivateImportExecutor() throws Exception {
-    var serviceComponentRuntime = getService(ServiceComponentRuntime.class);
     var componentDescription =
         serviceComponentRuntime.getComponentDescriptionDTO(
             FrameworkUtil.getBundle(ImportStudyProgramsBackgroundTaskExecutor.class),
@@ -212,9 +216,8 @@ public class StudyProgramImportIntegrationTest {
     allCreatedArticleIds.addAll(createdArticleIds);
   }
 
-  private static <T> T getService(Class<T> serviceClass) {
-    ServiceReference<T> serviceReference = bundleContext.getServiceReference(serviceClass);
-    return bundleContext.getService(serviceReference);
+  private static KonfoClient getKonfoClient() {
+    return bundleContext.getService(bundleContext.getServiceReference(KonfoClient.class));
   }
 
   /**
@@ -341,13 +344,12 @@ public class StudyProgramImportIntegrationTest {
 
     runImportAndWait();
 
-    var parentMenuItem = getService(NavigationService.class).getStudyProgramsParentMenuItem();
-    var categoryService = getService(StudyProgramCategoryService.class);
+    var parentMenuItem = navigationService.getStudyProgramsParentMenuItem();
     assertRefersToCategory(parentMenuItem, categoryService.getStudyProgramCategory());
 
     var mainMenuItem =
-        getService(SiteNavigationMenuItemLocalService.class)
-            .getSiteNavigationMenuItem(parentMenuItem.getParentSiteNavigationMenuItemId());
+        siteNavigationMenuItemLocalService.getSiteNavigationMenuItem(
+            parentMenuItem.getParentSiteNavigationMenuItemId());
     assertRefersToCategory(mainMenuItem, categoryService.getStudyProgramParentCategory());
 
     var menuItem = fetchStudyProgramMenuItem(oid);
@@ -460,7 +462,6 @@ public class StudyProgramImportIntegrationTest {
 
     // A study program without an image, so that its article shows the placeholder
     String oid = "1.2.246.562.20.00000000002";
-    var fingerprintService = getService(StudyProgramFingerprintService.class);
 
     runImportAndWait();
     JournalArticle before = fetchStudyProgramArticle(oid);
@@ -734,7 +735,6 @@ public class StudyProgramImportIntegrationTest {
 
   /** Stores an image for the study program, as if an earlier import had downloaded it. */
   private static FileEntry addEarlierImage(String oid) throws Exception {
-    var fileService = getService(StudyProgramFileService.class);
     FileEntry image =
         fileService.getOrCreateFileEntryByExternalReferenceCode(
             oid,
@@ -819,15 +819,14 @@ public class StudyProgramImportIntegrationTest {
   }
 
   private static SiteNavigationMenuItem fetchStudyProgramMenuItem(String oid) {
-    return getService(SiteNavigationMenuItemLocalService.class)
-        .fetchSiteNavigationMenuItemByExternalReferenceCode(
-            oid, jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
+    return siteNavigationMenuItemLocalService.fetchSiteNavigationMenuItemByExternalReferenceCode(
+        oid, jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId());
   }
 
   private static void deleteStudyProgramArticle(String oid) throws Exception {
     JournalArticle article = fetchStudyProgramArticle(oid);
     if (article != null) {
-      getService(NavigationService.class).deleteStudyProgramNavigationMenuItem(oid);
+      navigationService.deleteStudyProgramNavigationMenuItem(oid);
       journalArticleLocalService.deleteArticle(
           article.getGroupId(),
           article.getArticleId(),

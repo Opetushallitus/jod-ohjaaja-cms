@@ -12,6 +12,7 @@ package fi.okm.jod.ohjaaja.cms.util.test;
 import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE;
 import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.LINK_FIELDSET_EXTERNAL_REFERENCE_CODE;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.data.engine.rest.dto.v2_0.DataDefinition;
 import com.liferay.data.engine.rest.resource.v2_0.DataDefinitionResource;
 import com.liferay.dynamic.data.mapping.exception.NoSuchStructureException;
@@ -27,8 +28,8 @@ import com.liferay.portal.kernel.json.JSONObject;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.test.log.LoggerTestUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import fi.okm.jod.ohjaaja.cms.util.StructureInitializer;
 import java.util.ArrayList;
@@ -42,13 +43,12 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.FrameworkUtil;
 
 /**
  * Integration tests for StructureInitializer. Each test starts from the structures created from the
  * definitions, as in an empty environment.
  */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class StructureInitializerTest {
 
   @ClassRule @Rule
@@ -63,26 +63,28 @@ public class StructureInitializerTest {
 
   private static final String INGRESS_FIELD = "Text06331573";
 
-  private StructureInitializer structureInitializer;
+  @Inject private StructureInitializer structureInitializer;
+  @Inject private DDMStructureLocalService ddmStructureLocalService;
+  @Inject private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private DataDefinitionResource.Factory dataDefinitionResourceFactory;
+  @Inject private StructuredContentResource.Factory structuredContentResourceFactory;
+
   private DataDefinitionResource dataDefinitionResource;
   private StructuredContentResource structuredContentResource;
-  private DDMStructureLocalService ddmStructureLocalService;
   private long groupId;
   private final List<Long> structuredContentIds = new ArrayList<>();
 
   @Before
   public void setUp() throws Exception {
-    structureInitializer = getService(StructureInitializer.class);
-    ddmStructureLocalService = getService(DDMStructureLocalService.class);
-    groupId = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup().getGroupId();
+    groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     dataDefinitionResource =
-        getService(DataDefinitionResource.Factory.class)
+        dataDefinitionResourceFactory
             .create()
             .user(TestPropsValues.getUser())
             .checkPermissions(false)
             .build();
     structuredContentResource =
-        getService(StructuredContentResource.Factory.class)
+        structuredContentResourceFactory
             .create()
             .user(TestPropsValues.getUser())
             // The default language of the article structure
@@ -431,10 +433,5 @@ public class StructureInitializerTest {
         dataDefinitionResource.deleteDataDefinition(structure.getStructureId());
       }
     }
-  }
-
-  private static <T> T getService(Class<T> serviceClass) {
-    var bundleContext = FrameworkUtil.getBundle(StructureInitializerTest.class).getBundleContext();
-    return bundleContext.getService(bundleContext.getServiceReference(serviceClass));
   }
 }

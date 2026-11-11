@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.studyprogram.importer.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
@@ -16,9 +17,9 @@ import com.liferay.portal.kernel.security.permission.PermissionCheckerFactory;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.studyprogram.service.StudyProgramStructureService;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -26,34 +27,26 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 
 /**
  * Tests for DDM Structure management. Verifies that study program DDM structures are correctly
  * created and configured.
  */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class StudyProgramIntegrationTest {
 
   @ClassRule @Rule
   public static final AggregateTestRule aggregateTestRule = new LiferayIntegrationTestRule();
 
-  private static BundleContext bundleContext;
-  private static StudyProgramStructureService studyProgramStructureService;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static StudyProgramStructureService studyProgramStructureService;
+
   private static PermissionChecker originalPermissionChecker;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    var bundle = FrameworkUtil.getBundle(StudyProgramIntegrationTest.class);
-    bundleContext = bundle.getBundleContext();
-
-    studyProgramStructureService = getService(StudyProgramStructureService.class);
-
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
 
-    var permissionCheckerFactory = getService(PermissionCheckerFactory.class);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
@@ -62,11 +55,6 @@ public class StudyProgramIntegrationTest {
   @AfterClass
   public static void tearDownClass() {
     PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-  }
-
-  private static <T> T getService(Class<T> serviceClass) {
-    ServiceReference<T> serviceReference = bundleContext.getServiceReference(serviceClass);
-    return bundleContext.getService(serviceReference);
   }
 
   @Test

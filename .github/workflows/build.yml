@@ -31,18 +31,21 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
 
-      - name: Run jod-cms-testrunner-client unit tests
-        run: ./gradlew --no-daemon :test:jod-cms-testrunner-client:test
+      - name: Unit tests
+        run: ./gradlew --no-daemon clean test
 
-      - name: Test with Gradle
-        run: ./gradlew --no-daemon clean testWithDockerContainer
+      - name: Integration tests
+        run: ./gradlew --no-daemon testWithDockerContainer
 
       - name: Upload test reports
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: test-reports
-          path: build/reports/unified-tests
+          path: |
+            modules/*/build/reports/tests/test/
+            build/reports/integration-tests/
+            modules/*-test/build/test-results/integrationTest/
           retention-days: 30
 
       - name: Build with Gradle

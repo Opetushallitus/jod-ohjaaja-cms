@@ -1,8 +1,3 @@
-include ':test:jod-cms-testrunner-osgi'
-project(':test:jod-cms-testrunner-osgi').projectDir = file('test/jod-cms-testrunner-osgi')
-include ':test:jod-cms-testrunner-client'
-project(':test:jod-cms-testrunner-client').projectDir = file('test/jod-cms-testrunner-client')
-
 include ':modules:jod-ohjaaja-cms-tags-test'
 include ':modules:jod-ohjaaja-cms-navigation-test'
 include ':modules:jod-ohjaaja-cms-study-program-importer-test'

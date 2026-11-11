@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.auth.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.portal.kernel.model.Group;
 import com.liferay.portal.kernel.model.ResourceConstants;
@@ -25,10 +26,10 @@ import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.test.rule.DataGuard;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRole;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRoleInitializer;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import java.util.Map;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -37,8 +38,6 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 
 /**
  * Integration tests for the content producer role created by ContentProducerRoleInitializer.
@@ -46,7 +45,7 @@ import org.osgi.framework.FrameworkUtil;
  * <p>The role and its permissions persist by design, so the data guard is disabled.
  */
 @DataGuard(scope = DataGuard.Scope.NONE)
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class ContentProducerRoleTest {
 
   @ClassRule @Rule
@@ -56,25 +55,21 @@ public class ContentProducerRoleTest {
   private static final String OHJAAJA_PORTLET =
       "fi_okm_jod_ohjaaja_cms_statistics_portlet_StatisticsPortlet";
 
-  private static BundleContext bundleContext;
+  @Inject private static ContentProducerRoleInitializer initializer;
+  @Inject private static RoleLocalService roleLocalService;
+  @Inject private static ResourcePermissionLocalService resourcePermissionLocalService;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+
   private static PermissionChecker originalPermissionChecker;
-  private static ContentProducerRoleInitializer initializer;
-  private static RoleLocalService roleLocalService;
-  private static ResourcePermissionLocalService resourcePermissionLocalService;
   private static long companyId;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    bundleContext = FrameworkUtil.getBundle(ContentProducerRoleTest.class).getBundleContext();
-    initializer = getService(ContentProducerRoleInitializer.class);
-    roleLocalService = getService(RoleLocalService.class);
-    resourcePermissionLocalService = getService(ResourcePermissionLocalService.class);
     companyId = TestPropsValues.getCompanyId();
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
     User adminUser = TestPropsValues.getUser();
-    PermissionThreadLocal.setPermissionChecker(
-        getService(PermissionCheckerFactory.class).create(adminUser));
+    PermissionThreadLocal.setPermissionChecker(permissionCheckerFactory.create(adminUser));
   }
 
   @AfterClass
@@ -194,9 +189,5 @@ public class ContentProducerRoleTest {
         Role.class.getName(),
         ResourceConstants.SCOPE_INDIVIDUAL,
         String.valueOf(role.getRoleId()));
-  }
-
-  private static <T> T getService(Class<T> clazz) {
-    return bundleContext.getService(bundleContext.getServiceReference(clazz));
   }
 }

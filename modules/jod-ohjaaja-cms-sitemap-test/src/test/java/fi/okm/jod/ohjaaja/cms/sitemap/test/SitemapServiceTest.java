@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.sitemap.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.dynamic.data.mapping.form.field.type.constants.DDMFormFieldTypeConstants;
 import com.liferay.dynamic.data.mapping.model.DDMForm;
 import com.liferay.dynamic.data.mapping.model.DDMFormField;
@@ -39,13 +40,13 @@ import com.liferay.portal.kernel.util.StringUtil;
 import com.liferay.portal.kernel.util.Validator;
 import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
 import com.liferay.site.navigation.service.SiteNavigationMenuItemLocalService;
 import com.liferay.site.navigation.service.SiteNavigationMenuLocalService;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.sitemap.service.SitemapService;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -68,14 +69,12 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 
 /**
  * Integration tests for SitemapService. The tests run with an admin permission checker, like a
  * request with a logged-in user's cookies: the sitemap must still show only what the guest sees.
  */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class SitemapServiceTest {
 
   @ClassRule @Rule
@@ -87,11 +86,17 @@ public class SitemapServiceTest {
   private static final Locale EN = Locale.US;
   private static final String FRONTEND_URL_KEY = "ohjaaja.frontend.url";
 
-  private static BundleContext bundleContext;
-  private static SitemapService sitemapService;
-  private static JournalArticleLocalService journalArticleLocalService;
-  private static DDMStructureLocalService ddmStructureLocalService;
-  private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  @Inject private static SitemapService sitemapService;
+  @Inject private static JournalArticleLocalService journalArticleLocalService;
+  @Inject private static DDMStructureLocalService ddmStructureLocalService;
+  @Inject private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  @Inject private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static SAPEntryLocalService sapEntryLocalService;
+  @Inject private static JournalConverter journalConverter;
+  @Inject private static DDM ddm;
+
   private static PermissionChecker originalPermissionChecker;
   private static DDMStructure structure;
   private static long groupId;
@@ -104,14 +109,7 @@ public class SitemapServiceTest {
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    bundleContext = FrameworkUtil.getBundle(SitemapServiceTest.class).getBundleContext();
-    sitemapService = getService(SitemapService.class);
-    journalArticleLocalService = getService(JournalArticleLocalService.class);
-    ddmStructureLocalService = getService(DDMStructureLocalService.class);
-    siteNavigationMenuItemLocalService = getService(SiteNavigationMenuItemLocalService.class);
-    SiteNavigationMenuLocalService siteNavigationMenuLocalService =
-        getService(SiteNavigationMenuLocalService.class);
-    groupId = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup().getGroupId();
+    groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     // The test image has no portal-ext.properties of an environment
     originalFrontendUrl = PropsUtil.get(FRONTEND_URL_KEY);
     if (Validator.isBlank(originalFrontendUrl)) {
@@ -121,7 +119,7 @@ public class SitemapServiceTest {
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
     PermissionThreadLocal.setPermissionChecker(
-        getService(PermissionCheckerFactory.class).create(TestPropsValues.getUser()));
+        permissionCheckerFactory.create(TestPropsValues.getUser()));
 
     var serviceContext = getServiceContext(true);
     // The menu the navigation uses, created on startup
@@ -219,8 +217,7 @@ public class SitemapServiceTest {
   @Test
   public void shouldCreatePublicServiceAccessPolicyForSitemapApi() throws Exception {
     var sapEntry =
-        getService(SAPEntryLocalService.class)
-            .fetchSAPEntry(TestPropsValues.getCompanyId(), "JOD_OHJAAJA_SITEMAP");
+        sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), "JOD_OHJAAJA_SITEMAP");
 
     Assert.assertNotNull("SAP JOD_OHJAAJA_SITEMAP should exist", sapEntry);
     Assert.assertTrue("SAP should be enabled", sapEntry.isEnabled());
@@ -383,11 +380,8 @@ public class SitemapServiceTest {
     formValues.addDDMFormFieldValue(fieldValue("ingress", ingress));
     formValues.addDDMFormFieldValue(fieldValue("content", body));
     var content =
-        getService(JournalConverter.class)
-            .getContent(
-                structure,
-                getService(DDM.class).getFields(structure.getStructureId(), formValues),
-                groupId);
+        journalConverter.getContent(
+            structure, ddm.getFields(structure.getStructureId(), formValues), groupId);
 
     var article =
         journalArticleLocalService.addArticle(
@@ -444,13 +438,5 @@ public class SitemapServiceTest {
 
   private static String suffix() {
     return String.valueOf(System.nanoTime());
-  }
-
-  private static <T> T getService(Class<T> serviceClass) {
-    var reference = bundleContext.getServiceReference(serviceClass);
-    if (reference == null) {
-      throw new IllegalStateException("Service not found: " + serviceClass.getName());
-    }
-    return bundleContext.getService(reference);
   }
 }
