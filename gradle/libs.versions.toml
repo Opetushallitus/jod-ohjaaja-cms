@@ -14,26 +14,28 @@ liferay-gradle-plugins = "16.1.206"
 # Newest published as of DXP 2026.q2.9 (verified, integration tests green):
 portal-test = "34.1.0"
 portal-test-integration = "6.0.36"
+# Liferay Arquillian JUnit bridge (client, embedded into the test bundle) and its in-container connector.
+# Not managed by release.dxp.bom either: re-check on every Liferay version bump.
+arquillian-bridge = "1.0.23"
+arquillian-bridge-connector = "1.0.2"
 
 # Build / quality
 spotless = "7.0.2"
-jacoco = "0.8.14"
-bnd = "6.4.0"
 
 # Test & logging
 junit = "4.13.2"
-hamcrest = "1.3"
+# JUnit Platform console launcher + vintage engine run the JUnit 4 integration tests inside the Liferay test container
+junit-platform = "6.0.3"
+# Merges the modules' Open Test Reporting XML into one HTML report. Keep it on the version that
+# junit-platform-reporting uses (its open-test-reporting-tooling-spi dependency).
+open-test-reporting = "0.2.4"
 awaitility = "4.3.0"
 slf4j = "1.7.36"
 log4j = "2.25.4"
 
 # OSGi / servlet APIs
 osgi-core = "6.0.0"
-osgi-cmpn-annotations = "1.5.1"
-osgi-http-whiteboard = "1.1.1"
-osgi-log = "1.5.0"
 osgi-jaxrs = "1.0.1"
-jakarta-servlet = "6.0.0"
 javax-servlet = "3.1.0"
 javax-ws-rs = "2.1"
 javax-validation = "2.0.1.Final"
@@ -53,10 +55,14 @@ liferay-gradle-plugins = { module = "com.liferay:com.liferay.gradle.plugins", ve
 # Version comes from liferay.workspace.product / target platform (or derived in scripts)
 liferay-dxp-api = { module = "com.liferay.portal:release.dxp.api" }
 liferay-portal-test = { module = "com.liferay.portal:com.liferay.portal.test", version.ref = "portal-test" }
+liferay-arquillian-bridge = { module = "com.liferay:com.liferay.arquillian.extension.junit.bridge", version.ref = "arquillian-bridge" }
+liferay-arquillian-bridge-connector = { module = "com.liferay:com.liferay.arquillian.extension.junit.bridge.connector", version.ref = "arquillian-bridge-connector" }
 liferay-portal-test-integration = { module = "com.liferay.portal:com.liferay.portal.test.integration", version.ref = "portal-test-integration" }
 
 junit = { module = "junit:junit", version.ref = "junit" }
-hamcrest-core = { module = "org.hamcrest:hamcrest-core", version.ref = "hamcrest" }
+junit-platform-console = { module = "org.junit.platform:junit-platform-console", version.ref = "junit-platform" }
+junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junit-platform" }
+open-test-reporting-cli = { module = "org.opentest4j.reporting:open-test-reporting-cli", version.ref = "open-test-reporting" }
 awaitility = { module = "org.awaitility:awaitility", version.ref = "awaitility" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
@@ -64,16 +70,11 @@ log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4
 log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
 
 osgi-core = { module = "org.osgi:org.osgi.core", version.ref = "osgi-core" }
-osgi-cmpn-annotations = { module = "org.osgi:org.osgi.service.component.annotations", version.ref = "osgi-cmpn-annotations" }
-osgi-http-whiteboard = { module = "org.osgi:org.osgi.service.http.whiteboard", version.ref = "osgi-http-whiteboard" }
-osgi-log = { module = "org.osgi:org.osgi.service.log", version.ref = "osgi-log" }
 osgi-jaxrs = { module = "org.osgi:org.osgi.service.jaxrs", version.ref = "osgi-jaxrs" }
-jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "jakarta-servlet" }
 javax-servlet-api = { module = "javax.servlet:javax.servlet-api", version.ref = "javax-servlet" }
 javax-ws-rs-api = { module = "javax.ws.rs:javax.ws.rs-api", version.ref = "javax-ws-rs" }
 javax-validation-api = { module = "javax.validation:validation-api", version.ref = "javax-validation" }
 
-bnd = { module = "biz.aQute.bnd:biz.aQute.bnd", version.ref = "bnd" }
 jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson-datatype-jsr310" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }

@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.search.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.document.library.kernel.service.DLAppLocalService;
 import com.liferay.dynamic.data.mapping.model.DDMForm;
 import com.liferay.dynamic.data.mapping.model.DDMFormField;
@@ -38,9 +39,9 @@ import com.liferay.portal.kernel.test.util.ServiceContextTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.search.JodJournalArticleIndexerPostProcessor;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.io.ByteArrayOutputStream;
 import java.time.Duration;
@@ -63,7 +64,6 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
@@ -71,19 +71,23 @@ import org.osgi.framework.ServiceReference;
  * Integration tests for JodJournalArticleIndexerPostProcessor. Tests IndexerPostProcessor
  * registration and basic article indexing.
  */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class JodJournalArticleIndexerPostProcessorTest {
 
   @ClassRule @Rule
   public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
 
-  private static BundleContext bundleContext;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static JournalArticleLocalService journalArticleLocalService;
+  @Inject private static DDMStructureLocalService ddmStructureLocalService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static IndexerRegistry indexerRegistry;
+  @Inject private static DLAppLocalService dlAppLocalService;
+  @Inject private static DDM ddm;
+  @Inject private static JournalConverter journalConverter;
+
   private static PermissionChecker originalPermissionChecker;
-  private static JournalArticleLocalService journalArticleLocalService;
-  private static DDMStructureLocalService ddmStructureLocalService;
-  private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
-  private static IndexerRegistry indexerRegistry;
   private static Long TEST_GROUP_ID;
 
   private JournalArticle testArticle;
@@ -91,22 +95,11 @@ public class JodJournalArticleIndexerPostProcessorTest {
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    var bundle = FrameworkUtil.getBundle(JodJournalArticleIndexerPostProcessorTest.class);
-    bundleContext = bundle.getBundleContext();
-
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    var permissionCheckerFactoryRef =
-        bundleContext.getServiceReference(PermissionCheckerFactory.class);
-    var permissionCheckerFactory = bundleContext.getService(permissionCheckerFactoryRef);
     var adminUser = TestPropsValues.getUser();
     var permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
-    bundleContext.ungetService(permissionCheckerFactoryRef);
 
-    journalArticleLocalService = getService(JournalArticleLocalService.class);
-    ddmStructureLocalService = getService(DDMStructureLocalService.class);
-    indexerRegistry = getService(IndexerRegistry.class);
-    jodOhjaajaCmsUtil = getService(JodOhjaajaCmsUtil.class);
     TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
   }
 
@@ -132,14 +125,6 @@ public class JodJournalArticleIndexerPostProcessorTest {
         System.err.println("Failed to clean up test structure: " + e.getMessage());
       }
     }
-  }
-
-  private static <T> T getService(Class<T> serviceClass) {
-    var reference = bundleContext.getServiceReference(serviceClass);
-    if (reference == null) {
-      throw new RuntimeException("Service not found: " + serviceClass.getName());
-    }
-    return bundleContext.getService(reference);
   }
 
   @Test
@@ -241,6 +226,8 @@ public class JodJournalArticleIndexerPostProcessorTest {
   @Test
   public void shouldHaveIndexerPostProcessorRegistered() {
 
+    var bundleContext =
+        FrameworkUtil.getBundle(JodJournalArticleIndexerPostProcessorTest.class).getBundleContext();
     ServiceReference<?>[] references = null;
     try {
       references =
@@ -273,22 +260,17 @@ public class JodJournalArticleIndexerPostProcessorTest {
   @Test
   public void shouldHaveIndexerRegistryAvailable() {
 
-    var reference = bundleContext.getServiceReference(IndexerRegistry.class);
+    Assert.assertNotNull("IndexerRegistry service should not be null", indexerRegistry);
 
-    Assert.assertNotNull("IndexerRegistry service reference should not be null", reference);
-
-    var registry = bundleContext.getService(reference);
-    Assert.assertNotNull("IndexerRegistry service should not be null", registry);
-
-    var indexer = registry.getIndexer(JournalArticle.class);
+    var indexer = indexerRegistry.getIndexer(JournalArticle.class);
     Assert.assertNotNull("JournalArticle indexer should be available", indexer);
-
-    bundleContext.ungetService(reference);
   }
 
   @Test
   public void shouldVerifyPostProcessorConfiguration() {
 
+    var bundleContext =
+        FrameworkUtil.getBundle(JodJournalArticleIndexerPostProcessorTest.class).getBundleContext();
     ServiceReference<?>[] references = null;
     try {
       references =
@@ -338,28 +320,19 @@ public class JodJournalArticleIndexerPostProcessorTest {
     var uniqueKeyword = "SEARCHABLE_PDF_" + System.currentTimeMillis();
     var pdfBytes = createSimplePDF("Test PDF document containing: " + uniqueKeyword);
 
-    var dlAppRef = bundleContext.getServiceReference(DLAppLocalService.class);
-    var dlAppLocalService = bundleContext.getService(dlAppRef);
-
-    FileEntry fileEntry;
-    try {
-      fileEntry =
-          dlAppLocalService.addFileEntry(
-              null,
-              TestPropsValues.getUserId(),
-              TEST_GROUP_ID,
-              0,
-              "test-searchable.pdf",
-              "application/pdf",
-              pdfBytes,
-              null,
-              null,
-              null,
-              serviceContext);
-
-    } finally {
-      bundleContext.ungetService(dlAppRef);
-    }
+    var fileEntry =
+        dlAppLocalService.addFileEntry(
+            null,
+            TestPropsValues.getUserId(),
+            TEST_GROUP_ID,
+            0,
+            "test-searchable.pdf",
+            "application/pdf",
+            pdfBytes,
+            null,
+            null,
+            null,
+            serviceContext);
 
     // 3. Create article content using DDMFormValues
     var articleContent = createArticleContentWithPDFReference(testStructure, fileEntry);
@@ -505,41 +478,28 @@ public class JodJournalArticleIndexerPostProcessorTest {
   private String createArticleContentWithPDFReference(DDMStructure structure, FileEntry fileEntry)
       throws Exception {
 
-    // Get DDM and JournalConverter services
-    var ddmRef = bundleContext.getServiceReference(DDM.class);
-    var ddm = bundleContext.getService(ddmRef);
+    // Create DDMFormValues
+    var ddmForm = structure.getDDMForm();
+    var formValues = new DDMFormValues(ddmForm);
+    formValues.setAvailableLocales(Set.of(Locale.US));
+    formValues.setDefaultLocale(Locale.US);
 
-    var converterRef = bundleContext.getServiceReference(JournalConverter.class);
-    var converter = bundleContext.getService(converterRef);
+    // Create content field value (some basic HTML content)
+    var contentFieldValue = new DDMFormFieldValue();
+    contentFieldValue.setName("content");
+    var contentValue = new LocalizedValue(Locale.US);
+    contentValue.addString(Locale.US, "<p>Article content goes here</p>");
+    contentFieldValue.setValue(contentValue);
+    formValues.addDDMFormFieldValue(contentFieldValue);
 
-    try {
-      // Create DDMFormValues
-      var ddmForm = structure.getDDMForm();
-      var formValues = new DDMFormValues(ddmForm);
-      formValues.setAvailableLocales(Set.of(Locale.US));
-      formValues.setDefaultLocale(Locale.US);
+    // Create PDF field value with FileEntry reference
+    var pdfFieldValue = getPdfFieldValue(fileEntry);
 
-      // Create content field value (some basic HTML content)
-      var contentFieldValue = new DDMFormFieldValue();
-      contentFieldValue.setName("content");
-      var contentValue = new LocalizedValue(Locale.US);
-      contentValue.addString(Locale.US, "<p>Article content goes here</p>");
-      contentFieldValue.setValue(contentValue);
-      formValues.addDDMFormFieldValue(contentFieldValue);
+    formValues.addDDMFormFieldValue(pdfFieldValue);
 
-      // Create PDF field value with FileEntry reference
-      var pdfFieldValue = getPdfFieldValue(fileEntry);
-
-      formValues.addDDMFormFieldValue(pdfFieldValue);
-
-      // Convert to XML content
-      var fields = ddm.getFields(structure.getStructureId(), formValues);
-      return converter.getContent(structure, fields, TEST_GROUP_ID);
-
-    } finally {
-      bundleContext.ungetService(ddmRef);
-      bundleContext.ungetService(converterRef);
-    }
+    // Convert to XML content
+    var fields = ddm.getFields(structure.getStructureId(), formValues);
+    return journalConverter.getContent(structure, fields, TEST_GROUP_ID);
   }
 
   private static DDMFormFieldValue getPdfFieldValue(FileEntry fileEntry) {

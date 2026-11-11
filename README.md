@@ -95,23 +95,20 @@ See also [docs/WORKFLOW_METRICS.md](docs/WORKFLOW_METRICS.md) for the known Free
 
 ## Testing
 
+### Running the unit tests
+
+```sh
+./gradlew test
+```
+
+Runs the plain JUnit tests without Docker. The `*-test` integration test modules are skipped. CI and the pre-push hook run these too.
+
 ### Running all integration tests
 
 ```sh
 ./gradlew testWithDockerContainer
 ```
 
-This builds and starts a Liferay test container, runs all modules ending with `-test`, writes a unified HTML report to `build/reports/unified-tests/index.html`, and cleans up afterwards.
+Builds and starts a Liferay test container, runs the tests of every module ending with `-test` inside it, and cleans up afterwards. A combined HTML report is written to `build/reports/integration-tests/index.html`.
 
-### Generate unified test report
-
-```sh
-./gradlew unifiedTestReport
-```
-
-### Adding new test modules
-
-1. Create a module under `modules/` whose name ends with `-test` (e.g. `modules/jod-ohjaaja-cms-myfeature-test/`).
-2. It is discovered and included automatically.
-
-For detailed testing documentation, see [test/INTEGRATIO_TESTS.md](test/INTEGRATION_TESTS.md).
+See [docs/INTEGRATION_TESTS.md](docs/INTEGRATION_TESTS.md) for how the tests work, running single modules or test classes, and adding new test modules.

@@ -12,6 +12,7 @@ package fi.okm.jod.ohjaaja.cms.auth.test;
 import com.liferay.application.list.PanelApp;
 import com.liferay.application.list.PanelAppRegistry;
 import com.liferay.application.list.constants.PanelCategoryKeys;
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.journal.constants.JournalPortletKeys;
 import com.liferay.portal.kernel.model.Group;
 import com.liferay.portal.kernel.model.User;
@@ -24,10 +25,10 @@ import com.liferay.portal.kernel.service.UserLocalService;
 import com.liferay.portal.kernel.service.permission.PortletPermissionUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.test.util.UserTestUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRoleInitializer;
 import fi.okm.jod.ohjaaja.cms.auth.role.RoleSynchronizer;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.List;
 import org.junit.After;
@@ -39,11 +40,9 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 
 /** Verifies what a content producer can access in the site administration. */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class ContentProducerAccessTest {
 
   @ClassRule @Rule
@@ -59,29 +58,35 @@ public class ContentProducerAccessTest {
           "fi_okm_jod_ohjaaja_cms_comments_moderation_portlet_CommentsModerationPortlet",
           "fi_okm_jod_ohjaaja_cms_statistics_portlet_StatisticsPortlet");
 
-  private static BundleContext bundleContext;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static PanelAppRegistry panelAppRegistry;
+  @Inject private static RoleSynchronizer roleSynchronizer;
+  @Inject private static UserLocalService userLocalService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static ContentProducerRoleInitializer contentProducerRoleInitializer;
+
   private static PermissionChecker originalPermissionChecker;
-  private static PermissionCheckerFactory permissionCheckerFactory;
-  private static PanelAppRegistry panelAppRegistry;
-  private static RoleSynchronizer roleSynchronizer;
-  private static UserLocalService userLocalService;
   private static Group group;
 
   private User user;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    bundleContext = FrameworkUtil.getBundle(ContentProducerAccessTest.class).getBundleContext();
-    permissionCheckerFactory = getService(PermissionCheckerFactory.class);
-    panelAppRegistry = getService(PanelAppRegistry.class);
-    roleSynchronizer = getService(RoleSynchronizer.class);
-    userLocalService = getService(UserLocalService.class);
-    group = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup();
+    group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
     PermissionThreadLocal.setPermissionChecker(
         permissionCheckerFactory.create(TestPropsValues.getUser()));
-    getService(ContentProducerRoleInitializer.class).initRole(TestPropsValues.getCompanyId());
+    contentProducerRoleInitializer.initRole(TestPropsValues.getCompanyId());
+
+    // Liferay sets a portlet's control panel entry category only when the panel apps of that
+    // category are first looked up (normally by rendering the product menu). Without this, the
+    // control panel access check fails on a freshly started Liferay unless a panel app test
+    // happened to run first.
+    var adminPermissionChecker = PermissionThreadLocal.getPermissionChecker();
+    panelAppRegistry.getPanelApps(
+        PanelCategoryKeys.SITE_ADMINISTRATION_CONTENT, adminPermissionChecker, group);
+    panelAppRegistry.getPanelApps(OHJAAJA_PANEL_CATEGORY_KEY, adminPermissionChecker, group);
   }
 
   @AfterClass
@@ -149,9 +154,5 @@ public class ContentProducerAccessTest {
 
   private static List<String> portletIds(List<PanelApp> panelApps) {
     return panelApps.stream().map(PanelApp::getPortletId).toList();
-  }
-
-  private static <T> T getService(Class<T> clazz) {
-    return bundleContext.getService(bundleContext.getServiceReference(clazz));
   }
 }

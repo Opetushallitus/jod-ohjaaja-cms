@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.tags.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.asset.kernel.model.AssetVocabulary;
 import com.liferay.asset.kernel.service.AssetVocabularyLocalService;
 import com.liferay.portal.kernel.model.ResourceConstants;
@@ -21,11 +22,11 @@ import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.tags.dto.JodTaxonomyCategoryDto;
 import fi.okm.jod.ohjaaja.cms.tags.exception.TagsServiceException;
 import fi.okm.jod.ohjaaja.cms.tags.service.TagsService;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import fi.okm.jod.ohjaaja.cms.util.ServiceAccessPolicyInitializer;
 import java.net.URI;
@@ -35,60 +36,46 @@ import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 
 /** Integration tests for TagsService. Tests taxonomy category management functionality. */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class TagsServiceTest {
 
   @ClassRule @Rule
   public static final AggregateTestRule aggregateTestRule = new LiferayIntegrationTestRule();
 
-  private static TagsService tagsService;
-  private static BundleContext bundleContext;
-  private static ServiceReference<TagsService> serviceReference;
+  @Inject private static TagsService tagsService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static AssetVocabularyLocalService assetVocabularyLocalService;
+  @Inject private static GroupLocalService groupLocalService;
+  @Inject private static RoleLocalService roleLocalService;
+  @Inject private static ResourcePermissionLocalService resourcePermissionLocalService;
+  @Inject private static SAPEntryLocalService sapEntryLocalService;
+  @Inject private static ServiceAccessPolicyInitializer serviceAccessPolicyInitializer;
+
   private static Long TEST_GROUP_ID;
 
   @BeforeClass
   public static void setUpClass() {
-    var bundle = FrameworkUtil.getBundle(TagsServiceTest.class);
-    bundleContext = bundle.getBundleContext();
-    serviceReference = bundleContext.getServiceReference(TagsService.class);
-    if (serviceReference != null) {
-      tagsService = bundleContext.getService(serviceReference);
-    }
-    var jodOhjaajaCmsUtil =
-        bundleContext.getService(bundleContext.getServiceReference(JodOhjaajaCmsUtil.class));
     TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
-  }
-
-  @AfterClass
-  public static void tearDownClass() {
-    if (serviceReference != null && bundleContext != null) {
-      bundleContext.ungetService(serviceReference);
-    }
   }
 
   @Test
   public void shouldGrantGuestViewPermissionOnTagVocabulary() throws Exception {
     // A guest can view a tag only if it can view the vocabulary
     assertGuestCanViewVocabulary(
-        getService(AssetVocabularyLocalService.class)
-            .getAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID));
+        assetVocabularyLocalService.getAssetVocabularyByExternalReferenceCode(
+            "jod-ohjaaja-cms-tags", TEST_GROUP_ID));
   }
 
   @Test
   public void shouldCreateTagVocabularyWhenMissing() throws Exception {
-    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
     // Hides the vocabulary of the container from the service, as in an empty environment
     var existingVocabulary = hideTagVocabulary(true);
     AssetVocabulary createdVocabulary = null;
@@ -130,8 +117,8 @@ public class TagsServiceTest {
       tagsService.initTagVocabulary();
 
       var takenOverVocabulary =
-          getService(AssetVocabularyLocalService.class)
-              .fetchAssetVocabularyByExternalReferenceCode("jod-ohjaaja-cms-tags", TEST_GROUP_ID);
+          assetVocabularyLocalService.fetchAssetVocabularyByExternalReferenceCode(
+              "jod-ohjaaja-cms-tags", TEST_GROUP_ID);
       Assert.assertNotNull(takenOverVocabulary);
       Assert.assertEquals(
           existingVocabulary.getVocabularyId(), takenOverVocabulary.getVocabularyId());
@@ -142,7 +129,6 @@ public class TagsServiceTest {
 
   /** Changes the external reference code, and optionally the name, of the tag vocabulary. */
   private static AssetVocabulary hideTagVocabulary(boolean rename) throws Exception {
-    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
     var vocabulary =
         assetVocabularyLocalService.getAssetVocabularyByExternalReferenceCode(
             "jod-ohjaaja-cms-tags", TEST_GROUP_ID);
@@ -157,7 +143,6 @@ public class TagsServiceTest {
   }
 
   private static void restoreTagVocabulary(AssetVocabulary hiddenVocabulary) throws Exception {
-    var assetVocabularyLocalService = getService(AssetVocabularyLocalService.class);
     // Fetched again: an updated vocabulary has a new MVCC version
     var vocabulary =
         assetVocabularyLocalService.getAssetVocabulary(hiddenVocabulary.getVocabularyId());
@@ -192,22 +177,18 @@ public class TagsServiceTest {
   }
 
   private static long getCompanyGroupId() throws Exception {
-    return getService(GroupLocalService.class)
-        .getCompanyGroup(TestPropsValues.getCompanyId())
-        .getGroupId();
+    return groupLocalService.getCompanyGroup(TestPropsValues.getCompanyId()).getGroupId();
   }
 
   private static void assertGuestCanViewVocabulary(AssetVocabulary vocabulary) throws Exception {
-    var guestRole =
-        getService(RoleLocalService.class).getRole(vocabulary.getCompanyId(), RoleConstants.GUEST);
+    var guestRole = roleLocalService.getRole(vocabulary.getCompanyId(), RoleConstants.GUEST);
     var resourcePermission =
-        getService(ResourcePermissionLocalService.class)
-            .fetchResourcePermission(
-                vocabulary.getCompanyId(),
-                AssetVocabulary.class.getName(),
-                ResourceConstants.SCOPE_INDIVIDUAL,
-                String.valueOf(vocabulary.getVocabularyId()),
-                guestRole.getRoleId());
+        resourcePermissionLocalService.fetchResourcePermission(
+            vocabulary.getCompanyId(),
+            AssetVocabulary.class.getName(),
+            ResourceConstants.SCOPE_INDIVIDUAL,
+            String.valueOf(vocabulary.getVocabularyId()),
+            guestRole.getRoleId());
 
     Assert.assertNotNull(
         "The guest should have permissions on the tag vocabulary", resourcePermission);
@@ -216,15 +197,8 @@ public class TagsServiceTest {
         resourcePermission.hasActionId(ActionKeys.VIEW));
   }
 
-  private static <T> T getService(Class<T> serviceClass) {
-    return bundleContext.getService(bundleContext.getServiceReference(serviceClass));
-  }
-
   @Test
   public void shouldCreatePublicServiceAccessPolicyForTagsApi() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-
     var sapEntry =
         sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), "JOD_OHJAAJA_TAGS");
 
@@ -238,9 +212,6 @@ public class TagsServiceTest {
 
   @Test
   public void shouldAllowOnlyFrontendHeadlessDeliveryEndpointsForGuests() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-
     var sapEntry =
         sapEntryLocalService.fetchSAPEntry(TestPropsValues.getCompanyId(), "HEADLESS_ACCESS");
 
@@ -277,11 +248,6 @@ public class TagsServiceTest {
 
   @Test
   public void shouldCreateServiceAccessPolicyWhenDefaultLocaleIsFinnish() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-    var serviceAccessPolicyInitializer =
-        bundleContext.getService(
-            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
     var name = "JOD_OHJAAJA_TEST_FI_" + System.currentTimeMillis();
     var originalDefault = LocaleUtil.getDefault();
 
@@ -305,11 +271,6 @@ public class TagsServiceTest {
 
   @Test
   public void shouldNotRewriteServiceAccessPolicyWhenOnlyFormattingDiffers() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-    var serviceAccessPolicyInitializer =
-        bundleContext.getService(
-            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
     var name = "JOD_OHJAAJA_TEST_" + System.currentTimeMillis();
 
     serviceAccessPolicyInitializer.initPublicServiceAccessPolicy(name, "a.B#c\na.B#d", "Test");
@@ -332,11 +293,6 @@ public class TagsServiceTest {
 
   @Test
   public void shouldOverwriteModifiedServiceAccessPolicy() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-    var serviceAccessPolicyInitializer =
-        bundleContext.getService(
-            bundleContext.getServiceReference(ServiceAccessPolicyInitializer.class));
     var name = "JOD_OHJAAJA_TEST_" + System.currentTimeMillis();
     var signature = TagsServiceTest.class.getName() + "#*";
 

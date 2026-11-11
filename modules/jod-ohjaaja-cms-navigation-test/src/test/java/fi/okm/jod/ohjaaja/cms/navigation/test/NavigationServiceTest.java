@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.navigation.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.asset.kernel.model.AssetVocabulary;
 import com.liferay.asset.kernel.service.AssetCategoryLocalService;
@@ -36,6 +37,7 @@ import com.liferay.portal.kernel.util.UnicodePropertiesBuilder;
 import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import com.liferay.portal.security.service.access.policy.service.SAPEntryLocalService;
 import com.liferay.portal.test.log.LoggerTestUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import com.liferay.site.navigation.model.SiteNavigationMenu;
 import com.liferay.site.navigation.model.SiteNavigationMenuItem;
@@ -47,7 +49,6 @@ import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistence
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
 import fi.okm.jod.ohjaaja.cms.navigation.service.MainCategoryService;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.List;
 import java.util.Locale;
@@ -61,55 +62,41 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 
 /** Integration tests for NavigationService. Tests navigation menu management functionality. */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class NavigationServiceTest {
 
   @ClassRule @Rule
   public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
 
-  private static NavigationService navigationService;
-  private static BundleContext bundleContext;
-  private static ServiceReference<NavigationService> serviceReference;
+  @Inject private static NavigationService navigationService;
+  @Inject private static MainCategoryService mainCategoryService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
+  @Inject private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
+  @Inject private static SAPEntryLocalService sapEntryLocalService;
+  @Inject private static AssetCategoryLocalService assetCategoryLocalService;
+  @Inject private static AssetVocabularyLocalService assetVocabularyLocalService;
+  @Inject private static RoleLocalService roleLocalService;
+  @Inject private static ResourcePermissionLocalService resourcePermissionLocalService;
+  @Inject private static ExpandoValueLocalService expandoValueLocalService;
+  @Inject private static DDMStructureLocalService ddmStructureLocalService;
+  @Inject private static JournalArticleLocalService journalArticleLocalService;
+
   private static PermissionChecker originalPermissionChecker;
-  private static SiteNavigationMenuLocalService siteNavigationMenuLocalService;
-  private static SiteNavigationMenuItemLocalService siteNavigationMenuItemLocalService;
   private static Long TEST_GROUP_ID;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    var bundle = FrameworkUtil.getBundle(NavigationServiceTest.class);
-    bundleContext = bundle.getBundleContext();
-    serviceReference = bundleContext.getServiceReference(NavigationService.class);
-    if (serviceReference != null) {
-      navigationService = bundleContext.getService(serviceReference);
-    }
-    JodOhjaajaCmsUtil jodOhjaajaCmsUtil =
-        bundleContext.getService(bundleContext.getServiceReference(JodOhjaajaCmsUtil.class));
     TEST_GROUP_ID = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
     // Set up permissions
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    var permissionCheckerFactoryRef =
-        bundleContext.getServiceReference(PermissionCheckerFactory.class);
-    var permissionCheckerFactory = bundleContext.getService(permissionCheckerFactoryRef);
     User adminUser = TestPropsValues.getUser();
     PermissionChecker permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
-    bundleContext.ungetService(permissionCheckerFactoryRef);
-
-    // Get services
-    var menuLocalServiceRef =
-        bundleContext.getServiceReference(SiteNavigationMenuLocalService.class);
-    siteNavigationMenuLocalService = bundleContext.getService(menuLocalServiceRef);
-
-    var menuItemLocalServiceRef =
-        bundleContext.getServiceReference(SiteNavigationMenuItemLocalService.class);
-    siteNavigationMenuItemLocalService = bundleContext.getService(menuItemLocalServiceRef);
 
     // Initialize navigation
     navigationService.initNavigation();
@@ -118,10 +105,6 @@ public class NavigationServiceTest {
   @AfterClass
   public static void tearDownClass() {
     PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-
-    if (serviceReference != null && bundleContext != null) {
-      bundleContext.ungetService(serviceReference);
-    }
   }
 
   @Test
@@ -138,9 +121,6 @@ public class NavigationServiceTest {
 
   @Test
   public void shouldCreatePublicServiceAccessPolicyForNavigationApi() throws Exception {
-    var sapEntryLocalService =
-        bundleContext.getService(bundleContext.getServiceReference(SAPEntryLocalService.class));
-
     var sapEntry =
         sapEntryLocalService.fetchSAPEntry(
             TestPropsValues.getCompanyId(), "JOD_OHJAAJA_NAVIGATION");
@@ -211,7 +191,7 @@ public class NavigationServiceTest {
     var expectedTitles =
         List.of("Ohjaajan tietosisällöt", "Asiakastyön tueksi", "Ammatillinen kehittyminen");
     var mainCategories = getMainCategories();
-    var vocabulary = getService(MainCategoryService.class).fetchCategoryVocabulary();
+    var vocabulary = mainCategoryService.fetchCategoryVocabulary();
     Assert.assertNotNull(vocabulary);
 
     var topLevelCategoryIds =
@@ -242,11 +222,9 @@ public class NavigationServiceTest {
 
   @Test
   public void shouldTakeOverMainCategoryWithoutChangingIt() throws Exception {
-    var assetCategoryLocalService = getService(AssetCategoryLocalService.class);
     var category =
-        getService(MainCategoryService.class)
-            .fetchMainCategory(
-                MainCategoryService.PROFESSIONAL_DEVELOPMENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
+        mainCategoryService.fetchMainCategory(
+            MainCategoryService.PROFESSIONAL_DEVELOPMENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
     var originalTitle = category.getTitle("fi_FI");
     // As created by the study program importer and edited in the UI, and its menu item as created
     // in the DXP 2026 UI
@@ -292,12 +270,9 @@ public class NavigationServiceTest {
   @Test
   public void shouldGrantGuestViewPermissionOnMainCategories() throws Exception {
     var category =
-        getService(MainCategoryService.class)
-            .fetchMainCategory(
-                MainCategoryService.INFORMATION_CONTENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
-    var guestRole =
-        getService(RoleLocalService.class).getRole(category.getCompanyId(), RoleConstants.GUEST);
-    var resourcePermissionLocalService = getService(ResourcePermissionLocalService.class);
+        mainCategoryService.fetchMainCategory(
+            MainCategoryService.INFORMATION_CONTENT_CATEGORY_EXTERNAL_REFERENCE_CODE);
+    var guestRole = roleLocalService.getRole(category.getCompanyId(), RoleConstants.GUEST);
     // As a category created by hand without the permission
     resourcePermissionLocalService.setResourcePermissions(
         category.getCompanyId(),
@@ -321,17 +296,15 @@ public class NavigationServiceTest {
 
   @Test
   public void shouldNotCreateMainCategoryIfTheVocabularyHasUnknownCategories() throws Exception {
-    var assetCategoryLocalService = getService(AssetCategoryLocalService.class);
     var category =
-        getService(MainCategoryService.class)
-            .fetchMainCategory(MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE);
+        mainCategoryService.fetchMainCategory(
+            MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE);
     var originalTitleMap = category.getTitleMap();
     // As a main category renamed in the UI before it was managed in code
     category.setExternalReferenceCode("hand-made-" + System.currentTimeMillis());
     category.setTitleMap(Map.of(LocaleUtil.fromLanguageId("fi_FI"), "Uudelleen nimetty"));
     assetCategoryLocalService.updateAssetCategory(category);
-    var categoryCount =
-        getService(MainCategoryService.class).fetchCategoryVocabulary().getCategoriesCount();
+    var categoryCount = mainCategoryService.fetchCategoryVocabulary().getCategoriesCount();
 
     try (var logCapture =
         LoggerTestUtil.configureLog4JLogger(
@@ -342,11 +315,10 @@ public class NavigationServiceTest {
       Assert.assertEquals(1, logCapture.getLogEntries().size());
     }
     Assert.assertEquals(
-        categoryCount,
-        getService(MainCategoryService.class).fetchCategoryVocabulary().getCategoriesCount());
+        categoryCount, mainCategoryService.fetchCategoryVocabulary().getCategoriesCount());
     Assert.assertNull(
-        getService(MainCategoryService.class)
-            .fetchMainCategory(MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE));
+        mainCategoryService.fetchMainCategory(
+            MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE));
 
     // Taken over again once it has its title back
     var renamed = assetCategoryLocalService.getAssetCategory(category.getCategoryId());
@@ -390,10 +362,9 @@ public class NavigationServiceTest {
 
   @Test
   public void shouldTakeOverMainCategoryByTitle() throws Exception {
-    var assetCategoryLocalService = getService(AssetCategoryLocalService.class);
     var category =
-        getService(MainCategoryService.class)
-            .fetchMainCategory(MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE);
+        mainCategoryService.fetchMainCategory(
+            MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE);
     // As created by hand
     category.setExternalReferenceCode("hand-made-" + System.currentTimeMillis());
     assetCategoryLocalService.updateAssetCategory(category);
@@ -409,7 +380,6 @@ public class NavigationServiceTest {
   }
 
   private static List<AssetCategory> getMainCategories() {
-    var mainCategoryService = getService(MainCategoryService.class);
     return Stream.of(
             MainCategoryService.INFORMATION_CONTENT_CATEGORY_EXTERNAL_REFERENCE_CODE,
             MainCategoryService.CUSTOMER_WORK_CATEGORY_EXTERNAL_REFERENCE_CODE,
@@ -450,7 +420,7 @@ public class NavigationServiceTest {
       return false;
     }
     var typeSettings = UnicodePropertiesBuilder.fastLoad(menuItem.getTypeSettings()).build();
-    var category = getService(AssetCategoryLocalService.class).fetchAssetCategory(categoryId);
+    var category = assetCategoryLocalService.fetchAssetCategory(categoryId);
     return String.valueOf(categoryId).equals(typeSettings.getProperty("classPK"))
         || category
             .getExternalReferenceCode()
@@ -495,13 +465,12 @@ public class NavigationServiceTest {
           navigationService.getStudyProgramsParentMenuItem().getSiteNavigationMenuItemId());
 
       // Found by its external reference code if its type was never set, e.g. if setting it failed
-      getService(ExpandoValueLocalService.class)
-          .deleteValue(
-              listingMenuItem.getCompanyId(),
-              SiteNavigationMenuItem.class.getName(),
-              ExpandoTableConstants.DEFAULT_TABLE_NAME,
-              "Type",
-              listingMenuItem.getSiteNavigationMenuItemId());
+      expandoValueLocalService.deleteValue(
+          listingMenuItem.getCompanyId(),
+          SiteNavigationMenuItem.class.getName(),
+          ExpandoTableConstants.DEFAULT_TABLE_NAME,
+          "Type",
+          listingMenuItem.getSiteNavigationMenuItemId());
       Assert.assertEquals(
           listingMenuItem.getSiteNavigationMenuItemId(),
           navigationService
@@ -525,7 +494,7 @@ public class NavigationServiceTest {
       assertNavigationItems(mainMenuItem, mainCategory, listingMenuItem, studyProgramsCategory);
     } finally {
       deleteMenuItems(listingMenuItem, mainMenuItem);
-      getService(AssetVocabularyLocalService.class).deleteVocabulary(vocabulary);
+      assetVocabularyLocalService.deleteVocabulary(vocabulary);
     }
   }
 
@@ -574,7 +543,7 @@ public class NavigationServiceTest {
       assertNavigationItems(mainMenuItem, mainCategory, listingMenuItem, studyProgramsCategory);
     } finally {
       deleteMenuItems(listingMenuItem, mainMenuItem);
-      getService(AssetVocabularyLocalService.class).deleteVocabulary(vocabulary);
+      assetVocabularyLocalService.deleteVocabulary(vocabulary);
     }
   }
 
@@ -617,7 +586,7 @@ public class NavigationServiceTest {
           navigationService.getStudyProgramsParentMenuItem().getSiteNavigationMenuItemId());
     } finally {
       deleteMenuItems(handMadeMenuItem);
-      getService(AssetVocabularyLocalService.class).deleteVocabulary(vocabulary);
+      assetVocabularyLocalService.deleteVocabulary(vocabulary);
     }
   }
 
@@ -653,22 +622,20 @@ public class NavigationServiceTest {
   }
 
   private static AssetVocabulary addVocabulary() throws Exception {
-    return getService(AssetVocabularyLocalService.class)
-        .addVocabulary(
-            TestPropsValues.getUserId(),
-            TEST_GROUP_ID,
-            "nav-test-vocabulary-" + System.nanoTime(),
-            getServiceContext());
+    return assetVocabularyLocalService.addVocabulary(
+        TestPropsValues.getUserId(),
+        TEST_GROUP_ID,
+        "nav-test-vocabulary-" + System.nanoTime(),
+        getServiceContext());
   }
 
   private static AssetCategory addCategory(long vocabularyId, String title) throws Exception {
-    return getService(AssetCategoryLocalService.class)
-        .addCategory(
-            TestPropsValues.getUserId(),
-            TEST_GROUP_ID,
-            title + " " + System.nanoTime(),
-            vocabularyId,
-            getServiceContext());
+    return assetCategoryLocalService.addCategory(
+        TestPropsValues.getUserId(),
+        TEST_GROUP_ID,
+        title + " " + System.nanoTime(),
+        vocabularyId,
+        getServiceContext());
   }
 
   // The navigation is read with the guest's permissions
@@ -700,8 +667,6 @@ public class NavigationServiceTest {
   @Test
   public void shouldResolveArticleMenuItemsByExternalReferenceCodeAndFallBackForBrokenOnes()
       throws Exception {
-    var ddmStructureLocalService = getService(DDMStructureLocalService.class);
-    var journalArticleLocalService = getService(JournalArticleLocalService.class);
     var userId = TestPropsValues.getUserId();
     var serviceContext = ServiceContextTestUtil.getServiceContext(TEST_GROUP_ID, userId);
     var suffix = String.valueOf(System.currentTimeMillis());
@@ -806,15 +771,14 @@ public class NavigationServiceTest {
       Assert.assertEquals("Navigation test article", afterDraft.name());
 
       // The navigation is built with the guest's permissions, even when an admin requests it
-      var guestRole = getService(RoleLocalService.class).getRole(article.getCompanyId(), "Guest");
-      getService(ResourcePermissionLocalService.class)
-          .setResourcePermissions(
-              article.getCompanyId(),
-              articleClassName,
-              ResourceConstants.SCOPE_INDIVIDUAL,
-              String.valueOf(article.getResourcePrimKey()),
-              guestRole.getRoleId(),
-              new String[0]);
+      var guestRole = roleLocalService.getRole(article.getCompanyId(), "Guest");
+      resourcePermissionLocalService.setResourcePermissions(
+          article.getCompanyId(),
+          articleClassName,
+          ResourceConstants.SCOPE_INDIVIDUAL,
+          String.valueOf(article.getResourcePrimKey()),
+          guestRole.getRoleId(),
+          new String[0]);
 
       var afterGuestPermissionRemoved =
           findItem(
@@ -899,10 +863,6 @@ public class NavigationServiceTest {
         .filter(item -> item.id() == id)
         .findFirst()
         .orElseThrow(() -> new AssertionError("Navigation item " + id + " not found"));
-  }
-
-  private static <T> T getService(Class<T> serviceClass) {
-    return bundleContext.getService(bundleContext.getServiceReference(serviceClass));
   }
 
   @Test

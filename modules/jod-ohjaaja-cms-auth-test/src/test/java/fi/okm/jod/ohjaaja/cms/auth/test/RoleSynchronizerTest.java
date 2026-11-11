@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.auth.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.portal.kernel.model.Role;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.model.role.RoleConstants;
@@ -21,10 +22,10 @@ import com.liferay.portal.kernel.service.UserLocalService;
 import com.liferay.portal.kernel.test.util.RoleTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.test.util.UserTestUtil;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRoleInitializer;
 import fi.okm.jod.ohjaaja.cms.auth.role.RoleSynchronizer;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.List;
 import org.junit.After;
@@ -36,23 +37,24 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 
 /** Integration tests for synchronizing Liferay roles from Cognito groups. */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class RoleSynchronizerTest {
 
   @ClassRule @Rule
   public static final LiferayIntegrationTestRule liferayIntegrationTestRule =
       new LiferayIntegrationTestRule();
 
-  private static BundleContext bundleContext;
+  @Inject private static RoleSynchronizer roleSynchronizer;
+  @Inject private static RoleLocalService roleLocalService;
+  @Inject private static UserLocalService userLocalService;
+  @Inject private static UserGroupRoleLocalService userGroupRoleLocalService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static ContentProducerRoleInitializer contentProducerRoleInitializer;
+
   private static PermissionChecker originalPermissionChecker;
-  private static RoleSynchronizer roleSynchronizer;
-  private static RoleLocalService roleLocalService;
-  private static UserLocalService userLocalService;
-  private static UserGroupRoleLocalService userGroupRoleLocalService;
   private static Role administratorRole;
   private static Role contentProducerRole;
   private static long groupId;
@@ -62,20 +64,15 @@ public class RoleSynchronizerTest {
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    bundleContext = FrameworkUtil.getBundle(RoleSynchronizerTest.class).getBundleContext();
-    roleSynchronizer = getService(RoleSynchronizer.class);
-    roleLocalService = getService(RoleLocalService.class);
-    userLocalService = getService(UserLocalService.class);
-    userGroupRoleLocalService = getService(UserGroupRoleLocalService.class);
-    groupId = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup().getGroupId();
+    groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
     PermissionThreadLocal.setPermissionChecker(
-        getService(PermissionCheckerFactory.class).create(TestPropsValues.getUser()));
+        permissionCheckerFactory.create(TestPropsValues.getUser()));
 
     var companyId = TestPropsValues.getCompanyId();
     administratorRole = roleLocalService.getRole(companyId, RoleConstants.ADMINISTRATOR);
-    contentProducerRole = getService(ContentProducerRoleInitializer.class).initRole(companyId);
+    contentProducerRole = contentProducerRoleInitializer.initRole(companyId);
   }
 
   @AfterClass
@@ -131,9 +128,5 @@ public class RoleSynchronizerTest {
   private boolean hasContentProducerRole() {
     return userGroupRoleLocalService.hasUserGroupRole(
         user.getUserId(), groupId, contentProducerRole.getRoleId());
-  }
-
-  private static <T> T getService(Class<T> clazz) {
-    return bundleContext.getService(bundleContext.getServiceReference(clazz));
   }
 }

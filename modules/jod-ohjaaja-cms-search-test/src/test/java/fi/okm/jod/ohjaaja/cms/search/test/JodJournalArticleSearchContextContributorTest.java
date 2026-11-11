@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.search.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.portal.kernel.search.Field;
 import com.liferay.portal.kernel.search.SearchContext;
 import com.liferay.portal.kernel.search.Sort;
@@ -18,9 +19,9 @@ import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.search.spi.model.query.contributor.SearchContextContributor;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.search.JodJournalArticleSearchContextContributor;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -28,7 +29,6 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
@@ -40,7 +40,7 @@ import org.osgi.framework.ServiceReference;
  * enabled on the QueryConfig when keywords are present - searches without keywords are left
  * untouched - non-default sorts are preserved (scoring is still enabled)
  */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class JodJournalArticleSearchContextContributorTest {
 
   @ClassRule @Rule
@@ -50,26 +50,27 @@ public class JodJournalArticleSearchContextContributorTest {
   private static final String JOURNAL_ARTICLE_CLASS_NAME =
       "com.liferay.journal.model.JournalArticle";
 
-  private static BundleContext bundleContext;
-  private static PermissionChecker originalPermissionChecker;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+
+  @Inject(
+      filter =
+          "(&(indexer.class.name="
+              + JOURNAL_ARTICLE_CLASS_NAME
+              + ")"
+              + "(component.name=fi.okm.jod.ohjaaja.cms.search."
+              + "JodJournalArticleSearchContextContributor))",
+      type = SearchContextContributor.class)
   private static JodJournalArticleSearchContextContributor contributor;
-  private static ServiceReference<?> contributorReference;
+
+  private static PermissionChecker originalPermissionChecker;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    var bundle = FrameworkUtil.getBundle(JodJournalArticleSearchContextContributorTest.class);
-    bundleContext = bundle.getBundleContext();
-
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
-    var permissionCheckerFactoryRef =
-        bundleContext.getServiceReference(PermissionCheckerFactory.class);
-    var permissionCheckerFactory = bundleContext.getService(permissionCheckerFactoryRef);
     var adminUser = TestPropsValues.getUser();
     var permissionChecker = permissionCheckerFactory.create(adminUser);
     PermissionThreadLocal.setPermissionChecker(permissionChecker);
-    bundleContext.ungetService(permissionCheckerFactoryRef);
 
-    contributor = lookupContributor();
     Assert.assertNotNull(
         "JodJournalArticleSearchContextContributor must be registered for JournalArticle",
         contributor);
@@ -78,35 +79,13 @@ public class JodJournalArticleSearchContextContributorTest {
   @AfterClass
   public static void tearDownClass() {
     PermissionThreadLocal.setPermissionChecker(originalPermissionChecker);
-
-    if (contributorReference != null && bundleContext != null) {
-      bundleContext.ungetService(contributorReference);
-      contributorReference = null;
-    }
-  }
-
-  private static JodJournalArticleSearchContextContributor lookupContributor() throws Exception {
-    var references =
-        bundleContext.getAllServiceReferences(
-            SearchContextContributor.class.getName(),
-            "(indexer.class.name=" + JOURNAL_ARTICLE_CLASS_NAME + ")");
-    if (references == null) {
-      return null;
-    }
-
-    for (ServiceReference<?> ref : references) {
-      var service = bundleContext.getService(ref);
-      if (service instanceof JodJournalArticleSearchContextContributor jodContributor) {
-        contributorReference = ref;
-        return jodContributor;
-      }
-      bundleContext.ungetService(ref);
-    }
-    return null;
   }
 
   @Test
   public void shouldHaveSearchContextContributorRegistered() throws Exception {
+    var bundleContext =
+        FrameworkUtil.getBundle(JodJournalArticleSearchContextContributorTest.class)
+            .getBundleContext();
     var references =
         bundleContext.getAllServiceReferences(
             SearchContextContributor.class.getName(),

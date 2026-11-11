@@ -4,8 +4,102 @@ plugins {
   alias(libs.plugins.spotless) apply false
 }
 
-// Filled by the integration test tasks when run through testWithDockerContainer
-def failedIntegrationTestModules = Collections.synchronizedList([])
+ext.jodFailedIntegrationTestModules = Collections.synchronizedList([])
+
+// The Liferay test container (image liferay-test, built from Dockerfile.test). The integration
+// tests run inside it with "docker exec" (see gradle/jod.integration-test.gradle).
+ext.jodTestContainerName = 'liferay-test-container'
+
+// Where dockerRunTestContainer mounts the project directory and the Gradle user home inside the
+// container. The integration test classpath is translated to these paths.
+ext.jodContainerProjectDir = '/project'
+ext.jodContainerGradleHomeDir = '/gradle-home'
+
+// -PintegrationTests=FooTest,BarTest runs only those integration test classes (simple names).
+// null runs them all. See gradle/jod.integration-test.gradle.
+ext.jodSelectedIntegrationTests = providers.gradleProperty('integrationTests')
+    .map { it.split(',').collect { it.trim() }.findAll { !it.isEmpty() } as Set }
+    .getOrNull()
+if (jodSelectedIntegrationTests != null && jodSelectedIntegrationTests.isEmpty()) {
+  // An empty selection would skip every module and report success without running a test.
+  throw new GradleException('-PintegrationTests is empty: give test class names, or leave the property out to run all tests')
+}
+
+// A module's test JVM is killed after this many minutes, so that a test hanging inside Liferay
+// fails the module instead of blocking the build.
+ext.jodIntegrationTestTimeoutMinutes = 30
+
+// "running healthy", "running starting", "exited unhealthy", ... or "absent" when there is no
+// such container.
+ext.jodTestContainerState = { ->
+  def output = new ByteArrayOutputStream()
+  def result = exec {
+    commandLine 'docker', 'inspect', '--format', '{{.State.Status}} {{.State.Health.Status}}', jodTestContainerName
+    standardOutput = output
+    errorOutput = OutputStream.nullOutputStream()
+    ignoreExitValue = true
+  }
+  return result.exitValue == 0 ? output.toString().trim() : 'absent'
+}
+
+ext.jodRemoveTestContainer = { ->
+  exec {
+    commandLine 'docker', 'rm', '--force', '--volumes', jodTestContainerName
+    standardOutput = OutputStream.nullOutputStream()
+    errorOutput = OutputStream.nullOutputStream()
+    ignoreExitValue = true
+  }
+}
+
+// The image a container was created from, or '' when there is no such container.
+ext.jodTestContainerImageId = { ->
+  def output = new ByteArrayOutputStream()
+  def result = exec {
+    commandLine 'docker', 'inspect', '--format', '{{.Image}}', jodTestContainerName
+    standardOutput = output
+    errorOutput = OutputStream.nullOutputStream()
+    ignoreExitValue = true
+  }
+  return result.exitValue == 0 ? output.toString().trim() : ''
+}
+
+ext.jodTestImageId = { ->
+  def output = new ByteArrayOutputStream()
+  exec {
+    commandLine 'docker', 'images', '--quiet', '--no-trunc', 'liferay-test'
+    standardOutput = output
+  }
+  return output.toString().trim()
+}
+
+// Removes an earlier liferay-test image that a rebuild left without a tag. Does nothing when the
+// image is the current one, still carries a tag, or is still used by a container.
+ext.jodRemoveStaleTestImage = { String imageId ->
+  if (!imageId || imageId == jodTestImageId()) {
+    return
+  }
+  def tags = new ByteArrayOutputStream()
+  def result = exec {
+    commandLine 'docker', 'image', 'inspect', '--format', '{{len .RepoTags}}', imageId
+    standardOutput = tags
+    errorOutput = OutputStream.nullOutputStream()
+    ignoreExitValue = true
+  }
+  if (result.exitValue == 0 && tags.toString().trim() == '0') {
+    exec {
+      commandLine 'docker', 'rmi', imageId
+      standardOutput = OutputStream.nullOutputStream()
+      errorOutput = OutputStream.nullOutputStream()
+      ignoreExitValue = true
+    }
+  }
+}
+
+// True unless this build starts the container without running the whole workflow, i.e. unless the
+// container is meant to stay up for running single modules against it.
+ext.jodTestContainerCleanupWanted = { ->
+  !gradle.taskGraph.hasTask(':dockerRunTestContainer') || gradle.taskGraph.hasTask(':testWithDockerContainer')
+}
 
 subprojects { subproject ->
   subproject.pluginManager.withPlugin('java') {
@@ -72,11 +166,18 @@ if (System.getenv("CI") == null) {
   buildDockerImage {
     dependsOn 'installGitHooks', 'syncDockerEnv'
   }
-}
 
-tasks.register('dockerRemoveTestImage', Exec) {
-  ignoreExitValue = true
-  commandLine 'docker', 'rmi', '-f', 'liferay-test'
+  def installedHooksDir = file('.git/hooks')
+  if (installedHooksDir.directory) {
+    fileTree('scripts/git-hooks') { include 'pre-*' }.each { source ->
+      def installed = new File(installedHooksDir, source.name)
+      if (installed.file && !Arrays.equals(installed.bytes, source.bytes)) {
+        installed.bytes = source.bytes
+        installed.setExecutable(true)
+        logger.lifecycle("Updated the installed git hook ${source.name} from scripts/git-hooks")
+      }
+    }
+  }
 }
 
 tasks.register('copyTestDockerfile', Copy) {
@@ -97,22 +198,35 @@ tasks.register('downloadPortalTestBundle', Copy) {
   }
 }
 
-tasks.register('copyTestRunnerOsgiToDocker', Copy) {
-  dependsOn ':test:jod-cms-testrunner-osgi:build'
-  from "${rootProject.projectDir}/test/jod-cms-testrunner-osgi/build/libs/jod-cms-testrunner-osgi.jar"
-  into layout.buildDirectory.dir('docker/test/jod-cms-testrunner-osgi/build/libs')
-  doFirst {
-    println "Copying JOD integration test runner OSGi bundle to Docker context"
-  }
+tasks.register('downloadArquillianConnectorBundle', Copy) {
+  from configurations.detachedConfiguration(
+    dependencies.create(libs.liferay.arquillian.bridge.connector.get())
+  ).setTransitive(false)
+  into layout.buildDirectory.dir('docker/portal-test-libs')
+  rename { 'com.liferay.arquillian.extension.junit.bridge.connector.jar' }
 }
 
 tasks.register('dockerBuildTestImage', Exec) {
-  dependsOn tasks.named('copyTestDockerfile'), tasks.named('copyTestRunnerOsgiToDocker'), tasks.named('downloadPortalTestBundle')
+  group = 'docker'
+  description = 'Builds the Liferay test image (Dockerfile.test) with the application modules'
+  dependsOn tasks.named('copyTestDockerfile'), tasks.named('downloadPortalTestBundle'), tasks.named('downloadArquillianConnectorBundle')
+  def dockerDir = layout.buildDirectory.dir('docker')
   commandLine 'docker', 'build',
       '--build-arg', "LIFERAY_DOCKER_IMAGE=${liferayDockerImage}",
-      '-t', 'liferay-test',
-      '-f', "${layout.buildDirectory.get().asFile}/docker/Dockerfile.test",
-      "${layout.buildDirectory.get().asFile}/docker"
+      '--tag', 'liferay-test',
+      '--file', dockerDir.get().file('Dockerfile.test').asFile.absolutePath,
+      dockerDir.get().asFile.absolutePath
+
+  // The new image takes the tag over from the previous one, which would otherwise stay behind as a
+  // dangling image with its own copy of the application jars. An image that a running test
+  // container still uses is removed by dockerRunTestContainer, once it has replaced the container.
+  def previousImageId = ''
+  doFirst {
+    previousImageId = jodTestImageId()
+  }
+  doLast {
+    jodRemoveStaleTestImage(previousImageId)
+  }
 }
 
 gradle.projectsEvaluated {
@@ -126,151 +240,161 @@ gradle.projectsEvaluated {
   allDockerDeployTasks = allDockerDeployTasks.findAll { it != null }
 
   tasks.named('dockerBuildTestImage') {
-    dependsOn tasks.named('dockerRemoveTestImage'), tasks.named('createDockerfile')
+    dependsOn tasks.named('createDockerfile')
     dependsOn allDockerDeployTasks
   }
 }
 
 tasks.register('dockerRunTestContainer') {
-    group = 'docker'
-    description = 'Run Liferay test container'
+  group = 'docker'
+  description = 'Starts the Liferay test container and waits until its healthcheck passes (about two minutes)'
+  mustRunAfter 'dockerBuildTestImage'
 
-    doLast {
-        exec {
-            commandLine 'docker', 'run', '-d',
-                '--name', 'liferay-test-container',
-                '-p', '8080:8080',
-                '-e', 'LIFERAY_WORKSPACE_ENVIRONMENT=test',
-                'liferay-test:latest'
-        }
+  // In the testWithDockerContainer workflow the container must not outlive the build, whichever
+  // task fails after this one. Finalizers of this task run even then, unlike finalizers of
+  // testWithDockerContainer, which does not run at all when one of its dependencies fails.
+  // Outside the workflow they are skipped (jodTestContainerCleanupWanted).
+  finalizedBy 'showDockerLogs', 'dockerStopTestContainer', 'integrationTestReport'
 
-        println '⏳ Waiting for Liferay to start (this takes ~2 minutes)...'
+  doLast {
+    // A container left behind by an interrupted run would make "docker run" fail on the name.
+    def replacedImageId = jodTestContainerImageId()
+    jodRemoveTestContainer()
+    jodRemoveStaleTestImage(replacedImageId)
 
-        // Wait for Liferay to be ready
-        def maxAttempts = 120
-        def attempt = 0
-        def ready = false
-
-        while (attempt < maxAttempts && !ready) {
-            try {
-                def response = URI.create('http://localhost:8080').toURL().openConnection().with {
-                    requestMethod = 'GET'
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                    connect()
-                    responseCode
-                }
-                if (response == 200) {
-                    ready = true
-                    println '✅ Liferay is ready!'
-                }
-            } catch (Exception ignored) {
-                attempt++
-                Thread.sleep(5000)
-                if (attempt % 6 == 0) {
-                    println "Still waiting... (${attempt * 5}s)"
-                }
-            }
-        }
-
-        if (!ready) {
-            throw new GradleException('Liferay did not start in time')
-        }
+    exec {
+      // No published ports: a port 8080 mapping would only clash with the local development stack.
+      // The test JVM reads the test classes and jars from the two mounts and writes its reports
+      // under the project mount.
+      commandLine 'docker', 'run', '--detach', '--name', jodTestContainerName,
+          '--volume', "${rootProject.projectDir.canonicalPath}:${jodContainerProjectDir}",
+          '--volume', "${gradle.gradleUserHomeDir.canonicalPath}:${jodContainerGradleHomeDir}:ro",
+          'liferay-test'
     }
+
+    // Poll the HEALTHCHECK of Dockerfile.test. It allows ten minutes of "starting" on its own.
+    println 'Waiting for the Liferay test container to become healthy (about two minutes)...'
+    while (true) {
+      def state = jodTestContainerState()
+      if (state == 'running healthy') {
+        break
+      }
+      if (state != 'running starting') {
+        // In the workflow the finalizers show the logs and remove the container.
+        if (!gradle.taskGraph.hasTask(':testWithDockerContainer')) {
+          println "\n📋 Container logs (last 100 lines)..."
+          exec {
+            commandLine 'docker', 'logs', '--tail', '100', jodTestContainerName
+            ignoreExitValue = true
+          }
+          jodRemoveTestContainer()
+        }
+        throw new GradleException("Liferay test container did not become healthy: ${state}")
+      }
+      Thread.sleep(5000)
+    }
+    println 'Liferay test container is healthy'
+  }
 }
 
 tasks.register('dockerStopTestContainer') {
-    group = 'docker'
-    description = 'Stop and remove Liferay test container'
-
-    doLast {
-        exec {
-            commandLine 'docker', 'stop', 'liferay-test-container'
-            ignoreExitValue = true
-        }
-        exec {
-            commandLine 'docker', 'rm', 'liferay-test-container'
-            ignoreExitValue = true
-        }
-        println '🛑 Test container stopped and removed'
-    }
-}
-
-tasks.register('dockerLogsTestContainer') {
-    group = 'docker'
-    description = 'Show logs from Liferay test container'
-
-    doLast {
-        exec {
-            commandLine 'docker', 'logs', '-f', 'liferay-test-container'
-            ignoreExitValue = true
-        }
-    }
-}
-
-tasks.register('waitForLiferayToStabilize') {
   group = 'docker'
-  description = 'Wait for Liferay to fully stabilize after startup'
-
-  mustRunAfter 'dockerRunTestContainer'
-
+  description = 'Stops and removes the Liferay test container'
+  // Both are finalizers of dockerRunTestContainer: the logs must be shown while the container exists.
+  mustRunAfter 'showDockerLogs', 'testWithDockerContainer'
+  onlyIf('the container is not left running for single module runs') { jodTestContainerCleanupWanted() }
   doLast {
-    println '\n⏳ Waiting 5 seconds for Liferay to stabilize...'
-    Thread.sleep(5000)
+    jodRemoveTestContainer()
   }
+}
+
+tasks.register('dockerLogsTestContainer', Exec) {
+  group = 'docker'
+  description = 'Follows the logs of the Liferay test container'
+  ignoreExitValue = true
+  commandLine 'docker', 'logs', '-f', jodTestContainerName
 }
 
 gradle.projectsEvaluated {
-  def testTasks = subprojects
-      .findAll { it.name.endsWith('-test') }
-      .collect { it.tasks.named('test') }
+  def integrationTestProjects = subprojects.findAll { it.name.endsWith('-test') }
+  def integrationTestTasks = integrationTestProjects.collect { it.tasks.named('integrationTest') }
 
-  testTasks.each { task ->
-    task.get().mustRunAfter ':waitForLiferayToStabilize'
-  }
-
-  // In the full run, a failing module must not stop the rest of the modules from running.
-  // The failures are collected and testWithDockerContainer fails the build at the end.
-  gradle.taskGraph.whenReady { graph ->
-    if (graph.hasTask(':testWithDockerContainer')) {
-      testTasks.each { taskProvider ->
-        def task = taskProvider.get()
-        task.ignoreFailures = true
-        task.afterSuite { descriptor, result ->
-          if (descriptor.parent == null && result.failedTestCount > 0) {
-            failedIntegrationTestModules.add(
-                "${task.project.name}: ${result.failedTestCount} of ${result.testCount} tests failed")
-          }
-        }
-      }
+  if (jodSelectedIntegrationTests != null) {
+    def known = integrationTestProjects.collectMany { it.jodIntegrationTestClasses } as Set
+    def unknown = jodSelectedIntegrationTests - known
+    if (!unknown.isEmpty()) {
+      throw new GradleException("Unknown integration test classes in -PintegrationTests: ${unknown.sort().join(', ')}"
+          + "\nKnown classes: ${known.sort().join(', ')}")
     }
   }
-  tasks.named('testWithDockerContainer').configure {
-    dependsOn testTasks
-    finalizedBy 'unifiedTestReport'
+
+  integrationTestTasks.each { task ->
+    task.configure { mustRunAfter ':dockerRunTestContainer' }
   }
-  tasks.named('unifiedTestReport').configure {
-    mustRunAfter testTasks
-    reportOn testTasks.collect { it.get() }
+
+  tasks.named('dockerRunTestContainer').configure {
+    // Compile the tests before the container is started: a compile error would otherwise fail the
+    // build with the container still running, as the finalizers of testWithDockerContainer only
+    // run when that task itself runs.
+    mustRunAfter integrationTestProjects.collect { it.tasks.named('prepareIntegrationTestBundle') }
+  }
+
+  tasks.named('testWithDockerContainer').configure {
+    dependsOn integrationTestTasks
+  }
+
+  ['integrationTestReport', 'showDockerLogs', 'dockerStopTestContainer'].each { name ->
+    tasks.named(name).configure {
+      mustRunAfter integrationTestTasks
+    }
   }
 }
 
-tasks.register('showDockerLogs') {
-  group = 'docker'
-  description = 'Show last 100 lines of Liferay container logs'
+tasks.register('integrationTestReport', JavaExec) {
+  group = 'verification'
+  description = 'Merges the integration test results of all modules/*-test projects into one HTML report'
 
+  def reportFile = layout.buildDirectory.file('reports/integration-tests/index.html')
+  // When this build runs integration tests, only the results of the modules that ran are merged:
+  // the results that a skipped module left behind in an earlier build do not belong to this run.
+  // Without integration tests in the build, the report is made of everything on disk.
+  def eventFiles = { ->
+    def testTasks = subprojects.collect { it.tasks.findByName('integrationTest') }
+        .findAll { it != null && gradle.taskGraph.hasTask(it) }
+    def modules = testTasks.isEmpty()
+        ? subprojects.findAll { it.name.endsWith('-test') }
+        : testTasks.findAll { it.state.executed && !it.state.skipped }.collect { it.project }
+    return modules
+        .collect { it.layout.buildDirectory.file('test-results/integrationTest/open-test-report.xml').get().asFile }
+        .findAll { it.file }
+        .sort()
+  }
+
+  classpath = configurations.detachedConfiguration(
+      dependencies.create(libs.open.test.reporting.cli.get()))
+  mainClass = 'org.opentest4j.reporting.cli.ReportingCli'
+  onlyIf('the container is not left running for single module runs') { jodTestContainerCleanupWanted() }
+  onlyIf('integration test results exist') { !eventFiles().isEmpty() }
+
+  doFirst {
+    reportFile.get().asFile.parentFile.mkdirs()
+    args(['html-report', '--output', reportFile.get().asFile.absolutePath] +
+        eventFiles().collect { it.absolutePath })
+  }
   doLast {
+    println "Integration test report: ${reportFile.get().asFile.toURI()}"
+  }
+}
+
+tasks.register('showDockerLogs', Exec) {
+  group = 'docker'
+  description = 'Shows the last 100 lines of the Liferay test container logs'
+  ignoreExitValue = true
+  mustRunAfter 'testWithDockerContainer'
+  onlyIf('the container is not left running for single module runs') { jodTestContainerCleanupWanted() }
+  commandLine 'docker', 'logs', '--tail', '100', jodTestContainerName
+  doFirst {
     println '\n📋 Container logs (last 100 lines)...'
-    try {
-      project.exec {
-        commandLine 'docker', 'logs', '--tail', '100', 'liferay-test-container'
-        standardOutput = System.out
-        errorOutput = System.err
-        ignoreExitValue = true
-      }
-    } catch (Exception e) {
-      println '⚠️  Failed to get logs: ' + e.message
-    }
   }
 }
 
@@ -278,8 +402,7 @@ tasks.register('testWithDockerContainer') {
   group = 'verification'
   description = 'Run tests against Docker container (builds image, starts container, runs tests, stops container)'
 
-  dependsOn 'dockerBuildTestImage', 'dockerRunTestContainer', 'waitForLiferayToStabilize'
-  finalizedBy 'showDockerLogs', 'dockerStopTestContainer'
+  dependsOn 'dockerBuildTestImage', 'dockerRunTestContainer'
 
   doFirst {
     println '================================================'
@@ -288,60 +411,13 @@ tasks.register('testWithDockerContainer') {
   }
 
   doLast {
-    if (!failedIntegrationTestModules.isEmpty()) {
+    if (!jodFailedIntegrationTestModules.isEmpty()) {
       throw new GradleException(
-          "Integration tests failed:\n  " + failedIntegrationTestModules.join('\n  ')
-              + "\nSee build/reports/unified-tests/index.html")
+          "Integration tests failed:\n  " + jodFailedIntegrationTestModules.join('\n  ')
+              + "\nSee build/reports/integration-tests/index.html")
     }
     println '\n================================================'
     println '✅ Docker Container Test Workflow COMPLETE'
     println '================================================'
   }
-}
-
-
-tasks.register('unifiedTestReport', TestReport) {
-  description = 'Generates a unified HTML test report from all test modules (auto-discovers *-test modules)'
-  group = 'verification'
-
-  destinationDirectory = layout.buildDirectory.dir('reports/unified-tests')
-
-  doLast {
-    def reportFile = destinationDirectory.file('index.html').get().asFile
-    if (reportFile.exists()) {
-      println "✅ Unified test report generated successfully!"
-      println "   📊 Report location: ${reportFile.absolutePath}"
-      println "   🌐 Open in browser: file://${reportFile.absolutePath}"
-    } else {
-      println "⚠️  No test report generated. Make sure tests have been run first."
-    }
-  }
-}
-
-// Configure the test report task after project evaluation
-gradle.projectsEvaluated {
-  tasks.named('unifiedTestReport').configure {
-    // Find all test modules dynamically
-    def testModules = []
-    file("${rootProject.projectDir}/modules").eachDir { dir ->
-      if (dir.name.endsWith('-test')) {
-        testModules.add(dir.name)
-      }
-    }
-
-    testModules.each { moduleName ->
-      def binaryResultsDir = file("${rootProject.projectDir}/modules/${moduleName}/build/test-results/test/binary")
-      if (binaryResultsDir.exists()) {
-        testResults.from(binaryResultsDir)
-      }
-    }
-  }
-}
-
-// Ensure correct task order (keep for reference)
-gradle.projectsEvaluated {
-    // This ensures dockerRunTestContainer runs after dockerBuildTestImage
-    tasks.named('dockerRunTestContainer').configure {
-        mustRunAfter 'dockerBuildTestImage'
-    }
 }

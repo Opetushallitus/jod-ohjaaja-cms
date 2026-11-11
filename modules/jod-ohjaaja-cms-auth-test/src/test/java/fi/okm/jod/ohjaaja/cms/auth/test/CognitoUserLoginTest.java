@@ -9,6 +9,7 @@
 
 package fi.okm.jod.ohjaaja.cms.auth.test;
 
+import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.portal.kernel.model.Role;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.model.role.RoleConstants;
@@ -26,6 +27,7 @@ import com.liferay.portal.kernel.util.PropsKeys;
 import com.liferay.portal.kernel.util.PropsUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import com.liferay.portal.kernel.workflow.WorkflowConstants;
+import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
 import fi.okm.jod.ohjaaja.cms.auth.jwt.OidcIdentity;
 import fi.okm.jod.ohjaaja.cms.auth.role.ContentProducerRoleInitializer;
@@ -34,7 +36,6 @@ import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult;
 import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Allowed;
 import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.DenialReason;
 import fi.okm.jod.ohjaaja.cms.auth.user.LoginResult.Denied;
-import fi.okm.jod.ohjaaja.cms.testrunner.client.JodInContainerRunner;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,11 +49,9 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 
 /** Integration tests for resolving and linking Liferay users from Cognito identities. */
-@RunWith(JodInContainerRunner.class)
+@RunWith(Arquillian.class)
 public class CognitoUserLoginTest {
 
   @ClassRule @Rule
@@ -61,11 +60,14 @@ public class CognitoUserLoginTest {
 
   private static final List<String> ADMIN_GROUPS = List.of("cms-admin");
 
-  private static BundleContext bundleContext;
+  @Inject private static CognitoUserLogin cognitoUserLogin;
+  @Inject private static UserLocalService userLocalService;
+  @Inject private static RoleLocalService roleLocalService;
+  @Inject private static JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
+  @Inject private static PermissionCheckerFactory permissionCheckerFactory;
+  @Inject private static ContentProducerRoleInitializer contentProducerRoleInitializer;
+
   private static PermissionChecker originalPermissionChecker;
-  private static CognitoUserLogin cognitoUserLogin;
-  private static UserLocalService userLocalService;
-  private static RoleLocalService roleLocalService;
   private static Role administratorRole;
   private static long companyId;
   private static long groupId;
@@ -75,19 +77,15 @@ public class CognitoUserLoginTest {
 
   @BeforeClass
   public static void setUpClass() throws Exception {
-    bundleContext = FrameworkUtil.getBundle(CognitoUserLoginTest.class).getBundleContext();
-    cognitoUserLogin = getService(CognitoUserLogin.class);
-    userLocalService = getService(UserLocalService.class);
-    roleLocalService = getService(RoleLocalService.class);
-    groupId = getService(JodOhjaajaCmsUtil.class).getJodOhjaajaCmsGroup().getGroupId();
+    groupId = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup().getGroupId();
 
     originalPermissionChecker = PermissionThreadLocal.getPermissionChecker();
     PermissionThreadLocal.setPermissionChecker(
-        getService(PermissionCheckerFactory.class).create(TestPropsValues.getUser()));
+        permissionCheckerFactory.create(TestPropsValues.getUser()));
 
     companyId = TestPropsValues.getCompanyId();
     administratorRole = roleLocalService.getRole(companyId, RoleConstants.ADMINISTRATOR);
-    getService(ContentProducerRoleInitializer.class).initRole(companyId);
+    contentProducerRoleInitializer.initRole(companyId);
   }
 
   @AfterClass
@@ -325,9 +323,5 @@ public class CognitoUserLoginTest {
 
   private static String randomEmail() {
     return StringUtil.toLowerCase(RandomTestUtil.randomString()) + "@example.com";
-  }
-
-  private static <T> T getService(Class<T> clazz) {
-    return bundleContext.getService(bundleContext.getServiceReference(clazz));
   }
 }

@@ -7,16 +7,22 @@ FROM ${LIFERAY_DOCKER_IMAGE}
 
 ENV LIFERAY_WORKSPACE_ENVIRONMENT=test
 
-# Copy JOD integration test runner OSGi bundle (HTTP endpoint for installing test bundles)
-COPY --chown=liferay:liferay test/jod-cms-testrunner-osgi/build/libs/jod-cms-testrunner-osgi.jar /opt/liferay/osgi/modules/
-
 # Copy portal.test bundle for LiferayIntegrationTestRule and related test utilities
 COPY --chown=liferay:liferay portal-test-libs/com.liferay.portal.test.jar /opt/liferay/osgi/modules/
+
+# Liferay Arquillian connector: installs and starts the test bundles (see docs/INTEGRATION_TESTS.md)
+COPY --chown=liferay:liferay portal-test-libs/com.liferay.arquillian.extension.junit.bridge.connector.jar /opt/liferay/osgi/modules/
 
 # Copy all application modules (excluding test modules)
 COPY --chown=liferay:liferay deploy/*.jar /opt/liferay/osgi/modules/
 
-# 8080 - Liferay HTTP (also serves the /o/jod-testrunner test runner endpoint)
+# Healthy once the portal answers over HTTP and the Arquillian connector listens on port 32763
+# (0x7FFB, state 0A = LISTEN in /proc/net/tcp*). The port is only looked up, never connected to:
+# a probe that connects and closes without reading kills the connector's accept loop.
+HEALTHCHECK --interval=5s --timeout=5s --start-period=30s --retries=120 \
+  CMD curl -fs -o /dev/null http://localhost:8080/ && grep -qE ':7FFB 0+:0000 0A ' /proc/net/tcp /proc/net/tcp6
+
+# 8080 - Liferay HTTP (not published by the tests; everything goes over loopback)
 EXPOSE 8080
 
 USER liferay:liferay
