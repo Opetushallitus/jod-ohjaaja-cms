@@ -170,7 +170,6 @@
     },
     {
       "customProperties": {
-        "normalizedStructure": false,
         "labelAtStructureLevel": true,
         "ddmStructureLayoutId": "",
         "upgradedStructure": false,

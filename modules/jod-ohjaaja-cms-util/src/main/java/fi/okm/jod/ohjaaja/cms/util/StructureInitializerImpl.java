@@ -11,11 +11,14 @@ package fi.okm.jod.ohjaaja.cms.util;
 
 import com.liferay.data.engine.rest.dto.v2_0.DataDefinition;
 import com.liferay.data.engine.rest.resource.v2_0.DataDefinitionResource;
+import com.liferay.dynamic.data.mapping.constants.DDMStructureConstants;
 import com.liferay.dynamic.data.mapping.exception.NoSuchStructureException;
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
-import com.liferay.dynamic.data.mapping.model.DDMStructureConstants;
 import com.liferay.dynamic.data.mapping.service.DDMStructureLocalService;
+import com.liferay.journal.constants.JournalFolderConstants;
 import com.liferay.journal.model.JournalArticle;
+import com.liferay.journal.model.JournalFolder;
+import com.liferay.journal.service.JournalFolderLocalService;
 import com.liferay.petra.string.StringUtil;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.json.JSONArray;
@@ -25,6 +28,7 @@ import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.Group;
 import com.liferay.portal.kernel.module.framework.ModuleServiceLifecycle;
+import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.util.Portal;
 import java.io.IOException;
 import java.util.HashMap;
@@ -51,6 +55,10 @@ public class StructureInitializerImpl implements StructureInitializer {
   private static final String KEY_NESTED_FIELDS = "nestedDataDefinitionFields";
   private static final String FIELD_TYPE_FIELDSET = "fieldset";
 
+  private static final String NEWS_FOLDER_NAME = "Ajankohtaista";
+  private static final String NEWS_FOLDER_DESCRIPTION =
+      "Ajankohtaista-palstan uutiset. Kansioon voi lisätä vain uutisia.";
+
   // In dependency order: a fieldset before the structures that use it
   private static final List<Definition> DEFINITIONS =
       List.of(
@@ -73,10 +81,19 @@ public class StructureInitializerImpl implements StructureInitializer {
               true,
               // The name before it was managed in code, the same as on the servers
               List.of("Artikkeli", "Article"),
+              false),
+          new Definition(
+              NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE,
+              "structures/news.json",
+              // Managed in code from the start, nothing to take over
+              null,
+              false,
+              List.of(),
               false));
 
   @Reference private DataDefinitionResource.Factory dataDefinitionResourceFactory;
   @Reference private DDMStructureLocalService ddmStructureLocalService;
+  @Reference private JournalFolderLocalService journalFolderLocalService;
   @Reference private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
   @Reference private Portal portal;
 
@@ -118,6 +135,113 @@ public class StructureInitializerImpl implements StructureInitializer {
         log.error("Failed to initialize structure " + definition.externalReferenceCode(), e);
       }
     }
+
+    try {
+      initNewsFolder(group, dataDefinitionResource);
+    } catch (Exception e) {
+      log.error("Failed to initialize folder " + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE, e);
+    }
+  }
+
+  private void initNewsFolder(Group group, DataDefinitionResource dataDefinitionResource)
+      throws PortalException {
+    var groupId = group.getGroupId();
+    var newsStructure =
+        fetchStructure(dataDefinitionResource, NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE, groupId);
+    if (newsStructure == null) {
+      throw new PortalException(
+          "Structure " + NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE + " not found");
+    }
+    var userId = AdminUtil.getAdminUser(group.getCompanyId()).getUserId();
+
+    var folder =
+        journalFolderLocalService.fetchJournalFolderByExternalReferenceCode(
+            NEWS_FOLDER_EXTERNAL_REFERENCE_CODE, groupId);
+    if (folder != null && folder.isInTrash()) {
+      // A content producer can move it to the trash, where it would be deleted with the news
+      journalFolderLocalService.restoreFolderFromTrash(userId, folder.getFolderId());
+      folder = journalFolderLocalService.getFolder(folder.getFolderId());
+      log.warn(
+          "Restored folder "
+              + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE
+              + " ("
+              + folder.getFolderId()
+              + ") from the trash");
+    }
+    if (folder == null) {
+      var serviceContext = createServiceContext(group, userId);
+      // The guests see a news item only if they can see its folder too
+      serviceContext.setAddGroupPermissions(true);
+      serviceContext.setAddGuestPermissions(true);
+      folder =
+          journalFolderLocalService.addFolder(
+              NEWS_FOLDER_EXTERNAL_REFERENCE_CODE,
+              userId,
+              groupId,
+              JournalFolderConstants.DEFAULT_PARENT_FOLDER_ID,
+              NEWS_FOLDER_NAME,
+              NEWS_FOLDER_DESCRIPTION,
+              serviceContext);
+      log.info(
+          "Created folder "
+              + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE
+              + " ("
+              + folder.getFolderId()
+              + ")");
+    }
+
+    if (isNewsFolderUpToDate(folder, newsStructure.getStructureId())) {
+      log.info("Folder " + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE + " is up to date");
+      return;
+    }
+
+    // Left where it is, only its name, description and restriction are managed
+    journalFolderLocalService.updateFolder(
+        userId,
+        groupId,
+        folder.getFolderId(),
+        folder.getParentFolderId(),
+        NEWS_FOLDER_NAME,
+        NEWS_FOLDER_DESCRIPTION,
+        new long[] {newsStructure.getStructureId()},
+        JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW,
+        false,
+        createServiceContext(group, userId));
+    log.info(
+        "Updated folder "
+            + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE
+            + " ("
+            + folder.getFolderId()
+            + ") to allow only structure "
+            + NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE);
+  }
+
+  private boolean isNewsFolderUpToDate(JournalFolder folder, long newsStructureId)
+      throws PortalException {
+    if (folder.getRestrictionType()
+            != JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW
+        || !NEWS_FOLDER_NAME.equals(folder.getName())
+        || !NEWS_FOLDER_DESCRIPTION.equals(folder.getDescription())) {
+      return false;
+    }
+    var allowedStructureIds =
+        journalFolderLocalService
+            .getDDMStructures(
+                new long[] {folder.getGroupId()},
+                folder.getFolderId(),
+                JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW)
+            .stream()
+            .map(DDMStructure::getStructureId)
+            .toList();
+    return allowedStructureIds.equals(List.of(newsStructureId));
+  }
+
+  private static ServiceContext createServiceContext(Group group, long userId) {
+    var serviceContext = new ServiceContext();
+    serviceContext.setCompanyId(group.getCompanyId());
+    serviceContext.setScopeGroupId(group.getGroupId());
+    serviceContext.setUserId(userId);
+    return serviceContext;
   }
 
   private void initStructure(
@@ -262,7 +386,10 @@ public class StructureInitializerImpl implements StructureInitializer {
       long groupId)
       throws PortalException {
     var structure =
-        fetchStructure(dataDefinitionResource, definition.legacyExternalReferenceCode(), groupId);
+        definition.legacyExternalReferenceCode() == null
+            ? null
+            : fetchStructure(
+                dataDefinitionResource, definition.legacyExternalReferenceCode(), groupId);
     var foundBy = "external reference code " + definition.legacyExternalReferenceCode();
     if (structure == null && definition.takeOverByName()) {
       structure =
@@ -322,6 +449,10 @@ public class StructureInitializerImpl implements StructureInitializer {
    * Whether the current structure has every value of the definition. The values Liferay adds, such
    * as empty translations and defaults, are ignored. Lists of fields and layout rows must match one
    * to one.
+   *
+   * <p>A definition must leave out the values Liferay manages itself, or the structure is rewritten
+   * on every start. E.g. Liferay sets normalizedStructure of a fieldset field to true whenever the
+   * structure has no articles, whatever the definition says.
    */
   static boolean matches(Object desired, Object current) {
     if (desired instanceof JSONObject desiredObject) {
