@@ -11,22 +11,32 @@ package fi.okm.jod.ohjaaja.cms.util.test;
 
 import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE;
 import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.LINK_FIELDSET_EXTERNAL_REFERENCE_CODE;
+import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.NEWS_FOLDER_EXTERNAL_REFERENCE_CODE;
+import static fi.okm.jod.ohjaaja.cms.util.StructureInitializer.NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE;
 
 import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.data.engine.rest.dto.v2_0.DataDefinition;
 import com.liferay.data.engine.rest.resource.v2_0.DataDefinitionResource;
+import com.liferay.dynamic.data.mapping.constants.DDMStructureConstants;
 import com.liferay.dynamic.data.mapping.exception.NoSuchStructureException;
 import com.liferay.dynamic.data.mapping.model.DDMStructure;
-import com.liferay.dynamic.data.mapping.model.DDMStructureConstants;
 import com.liferay.dynamic.data.mapping.service.DDMStructureLocalService;
 import com.liferay.headless.delivery.dto.v1_0.ContentField;
 import com.liferay.headless.delivery.dto.v1_0.StructuredContent;
 import com.liferay.headless.delivery.resource.v1_0.StructuredContentResource;
+import com.liferay.journal.constants.JournalFolderConstants;
+import com.liferay.journal.exception.InvalidDDMStructureException;
+import com.liferay.journal.model.JournalFolder;
+import com.liferay.journal.service.JournalArticleLocalService;
+import com.liferay.journal.service.JournalFolderLocalService;
 import com.liferay.portal.kernel.json.JSONArray;
 import com.liferay.portal.kernel.json.JSONFactoryUtil;
 import com.liferay.portal.kernel.json.JSONObject;
+import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.service.UserLocalService;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.util.LocaleUtil;
+import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import com.liferay.portal.test.log.LoggerTestUtil;
 import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
@@ -35,6 +45,7 @@ import fi.okm.jod.ohjaaja.cms.util.StructureInitializer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;
@@ -68,6 +79,9 @@ public class StructureInitializerTest {
   @Inject private JodOhjaajaCmsUtil jodOhjaajaCmsUtil;
   @Inject private DataDefinitionResource.Factory dataDefinitionResourceFactory;
   @Inject private StructuredContentResource.Factory structuredContentResourceFactory;
+  @Inject private UserLocalService userLocalService;
+  @Inject private JournalArticleLocalService journalArticleLocalService;
+  @Inject private JournalFolderLocalService journalFolderLocalService;
 
   private DataDefinitionResource dataDefinitionResource;
   private StructuredContentResource structuredContentResource;
@@ -277,8 +291,173 @@ public class StructureInitializerTest {
             .contains("Text99999999"));
   }
 
+  @Test
+  public void shouldCreateNewsStructureWithTheFieldsOfTheArticle() throws Exception {
+    var fieldset = getStructure(LINK_FIELDSET_EXTERNAL_REFERENCE_CODE);
+    var article = getDefinition(getStructure(ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE));
+    var news = getDefinition(getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE));
+
+    Assert.assertEquals("Ohjaaja CMS Uutinen", news.getJSONObject("name").getString("fi_FI"));
+    Assert.assertEquals(
+        String.valueOf(fieldset.getStructureId()),
+        getFieldsetField(news).getJSONObject("customProperties").getString("ddmStructureId"));
+    var newsFields = news.getJSONArray("dataDefinitionFields");
+    Assert.assertEquals(
+        List.of("Text06331573", "RichText28658582", "Image59796823", "Fieldset73641796"),
+        getFieldNames(newsFields));
+    // The same names and field references as in the article, so that the UI can render both alike
+    for (var name : getFieldNames(newsFields)) {
+      var newsField = getField(news, name);
+      var articleField = getField(article, name);
+      Assert.assertEquals(
+          name, articleField.getString("fieldType"), newsField.getString("fieldType"));
+      Assert.assertEquals(
+          name,
+          articleField.getJSONObject("customProperties").getString("fieldReference"),
+          newsField.getJSONObject("customProperties").getString("fieldReference"));
+    }
+  }
+
+  @Test
+  public void shouldCreateNewsFolderAllowingOnlyNews() throws Exception {
+    var folder = getNewsFolder();
+    var news = getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE);
+    Assert.assertEquals("Ajankohtaista", folder.getName());
+    Assert.assertEquals(
+        JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW,
+        folder.getRestrictionType());
+    Assert.assertEquals(List.of(news.getStructureId()), getAllowedStructureIds(folder));
+
+    addNews(news.getStructureId(), List.of("en-US", "fi-FI"));
+    try {
+      addArticle(getStructure(ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE).getStructureId(), folder);
+      Assert.fail("An article was added to the news folder");
+    } catch (InvalidDDMStructureException e) {
+      // Expected
+    }
+
+    try (var logCapture =
+        LoggerTestUtil.configureLog4JLogger(
+            "fi.okm.jod.ohjaaja.cms.util.StructureInitializerImpl", LoggerTestUtil.INFO)) {
+      structureInitializer.initStructures();
+
+      Assert.assertTrue(
+          String.valueOf(logCapture.getMessages()),
+          logCapture
+              .getMessages()
+              .contains("Folder " + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE + " is up to date"));
+    }
+  }
+
+  @Test
+  public void shouldRestoreNewsFolderChangedInTheUi() throws Exception {
+    var folder = getNewsFolder();
+    var serviceContext = new ServiceContext();
+    serviceContext.setScopeGroupId(groupId);
+    journalFolderLocalService.updateFolder(
+        TestPropsValues.getUserId(),
+        groupId,
+        folder.getFolderId(),
+        folder.getParentFolderId(),
+        "Muutettu",
+        folder.getDescription(),
+        new long[0],
+        JournalFolderConstants.RESTRICTION_TYPE_INHERIT,
+        false,
+        serviceContext);
+
+    structureInitializer.initStructures();
+
+    var restored = getNewsFolder();
+    Assert.assertEquals(folder.getFolderId(), restored.getFolderId());
+    Assert.assertEquals("Ajankohtaista", restored.getName());
+    Assert.assertEquals(
+        JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW,
+        restored.getRestrictionType());
+    Assert.assertEquals(
+        List.of(getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE).getStructureId()),
+        getAllowedStructureIds(restored));
+  }
+
+  @Test
+  public void shouldRestoreNewsFolderAllowingAlsoOtherStructures() throws Exception {
+    // The restriction type is kept, but another structure is allowed too and the description
+    // changed, e.g. to add articles to the folder in the UI
+    var folder = getNewsFolder();
+    var newsStructureId = getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE).getStructureId();
+    var serviceContext = new ServiceContext();
+    serviceContext.setScopeGroupId(groupId);
+    journalFolderLocalService.updateFolder(
+        TestPropsValues.getUserId(),
+        groupId,
+        folder.getFolderId(),
+        folder.getParentFolderId(),
+        folder.getName(),
+        "Muutettu",
+        new long[] {
+          newsStructureId, getStructure(ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE).getStructureId()
+        },
+        JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW,
+        false,
+        serviceContext);
+    Assert.assertEquals(2, getAllowedStructureIds(getNewsFolder()).size());
+
+    structureInitializer.initStructures();
+
+    var restored = getNewsFolder();
+    Assert.assertEquals(folder.getFolderId(), restored.getFolderId());
+    Assert.assertEquals(folder.getDescription(), restored.getDescription());
+    Assert.assertEquals(List.of(newsStructureId), getAllowedStructureIds(restored));
+  }
+
+  @Test
+  public void shouldRestoreNewsFolderFromTheTrash() throws Exception {
+    var folder = getNewsFolder();
+    var added =
+        addNews(
+            getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE).getStructureId(),
+            List.of("en-US", "fi-FI"));
+    journalFolderLocalService.moveFolderToTrash(TestPropsValues.getUserId(), folder.getFolderId());
+    Assert.assertTrue(getNewsFolder().isInTrash());
+    var trashed = journalArticleLocalService.getLatestArticle(added.getId());
+    // Liferay moves the articles of a trashed folder to the trash with it
+    Assert.assertTrue(trashed.isInTrash());
+
+    structureInitializer.initStructures();
+
+    var restored = getNewsFolder();
+    Assert.assertEquals(folder.getFolderId(), restored.getFolderId());
+    Assert.assertFalse(restored.isInTrash());
+    Assert.assertEquals("Ajankohtaista", restored.getName());
+    // The news are restored with their folder
+    var article = journalArticleLocalService.getLatestArticle(added.getId());
+    Assert.assertFalse(article.isInTrash());
+    Assert.assertEquals(WorkflowConstants.STATUS_APPROVED, article.getStatus());
+  }
+
+  @Test
+  public void shouldServePublishedNewsToGuestsInEveryLanguage() throws Exception {
+    var news = getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE);
+    var added = addNews(news.getStructureId(), List.of("en-US", "fi-FI", "sv-SE"));
+
+    for (var languageId : List.of("en-US", "fi-FI", "sv-SE")) {
+      var content = getAsGuest(added.getId(), languageId);
+      Assert.assertEquals(news.getStructureId(), content.getContentStructureId().longValue());
+      Assert.assertEquals("Uutinen " + languageId, content.getTitle());
+      Assert.assertEquals("Ingressi " + languageId, getData(content.getContentFields(), "ingress"));
+      Assert.assertEquals(
+          "<p>Sisältö " + languageId + "</p>", getData(content.getContentFields(), "content"));
+      var link = findContentField(content.getContentFields(), "link");
+      Assert.assertEquals(
+          "Linkki " + languageId, getData(link.getNestedContentFields(), "linktext"));
+      Assert.assertEquals(
+          "https://example.org/" + languageId, getData(link.getNestedContentFields(), "linkurl"));
+    }
+  }
+
   private void assertNotUpdatedOnRestart(DDMStructure fieldset, DDMStructure article)
       throws Exception {
+    var news = getStructure(NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE);
     // Only a fragment is listed among the fieldsets and not among the structures
     Assert.assertEquals(
         DDMStructureConstants.TYPE_FRAGMENT,
@@ -286,22 +465,109 @@ public class StructureInitializerTest {
     Assert.assertEquals(
         DDMStructureConstants.TYPE_DEFAULT,
         ddmStructureLocalService.getStructure(article.getStructureId()).getType());
+    Assert.assertEquals(DDMStructureConstants.TYPE_DEFAULT, news.getType());
 
     var fieldsetVersion = getVersion(fieldset.getStructureId());
     var articleVersion = getVersion(article.getStructureId());
+    var newsVersion = getVersion(news.getStructureId());
 
-    structureInitializer.initStructures();
+    // Updating a structure does not necessarily change its version, so the log tells whether
+    // anything was written
+    try (var logCapture =
+        LoggerTestUtil.configureLog4JLogger(
+            "fi.okm.jod.ohjaaja.cms.util.StructureInitializerImpl", LoggerTestUtil.INFO)) {
+      structureInitializer.initStructures();
+
+      Assert.assertEquals(
+          List.of(
+              "Structure " + LINK_FIELDSET_EXTERNAL_REFERENCE_CODE + " is up to date",
+              "Structure " + ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE + " is up to date",
+              "Structure " + NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE + " is up to date",
+              "Folder " + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE + " is up to date"),
+          logCapture.getMessages());
+    }
 
     Assert.assertEquals(fieldsetVersion, getVersion(fieldset.getStructureId()));
     Assert.assertEquals(articleVersion, getVersion(article.getStructureId()));
+    Assert.assertEquals(newsVersion, getVersion(news.getStructureId()));
+  }
+
+  /**
+   * A news item in the news folder, readable by anyone, translated to the given languages (e.g.
+   * "fi-FI").
+   */
+  private StructuredContent addNews(long structureId, List<String> languageIds) throws Exception {
+    var content =
+        structuredContentResource.postStructuredContentFolderStructuredContent(
+            getNewsFolder().getFolderId(),
+            StructuredContent.toDTO(
+                """
+                {
+                  "contentStructureId": %d,
+                  "title": "Uutinen en-US",
+                  "title_i18n": %s,
+                  "viewableBy": "Anyone",
+                  "contentFields": [
+                    %s,
+                    %s,
+                    {"name": "link", "fieldReference": "link", "nestedContentFields": [%s, %s]}
+                  ]
+                }
+                """
+                    .formatted(
+                        structureId,
+                        localized(languageIds, "Uutinen %s"),
+                        localizedContentField("ingress", languageIds, "Ingressi %s"),
+                        localizedContentField("content", languageIds, "<p>Sisältö %s</p>"),
+                        localizedContentField("linktext", languageIds, "Linkki %s"),
+                        localizedContentField("linkurl", languageIds, "https://example.org/%s"))));
+    structuredContentIds.add(content.getId());
+    return content;
+  }
+
+  private static JSONObject localized(List<String> languageIds, String format) {
+    var values = JSONFactoryUtil.createJSONObject();
+    for (var languageId : languageIds) {
+      values.put(languageId, format.formatted(languageId));
+    }
+    return values;
+  }
+
+  private static String localizedContentField(
+      String name, List<String> languageIds, String format) {
+    var values = JSONFactoryUtil.createJSONObject();
+    for (var languageId : languageIds) {
+      values.put(
+          languageId, JSONFactoryUtil.createJSONObject().put("data", format.formatted(languageId)));
+    }
+    return JSONFactoryUtil.createJSONObject()
+        .put("name", name)
+        .put("fieldReference", name)
+        .put("contentFieldValue", values.getJSONObject("en-US"))
+        .put("contentFieldValue_i18n", values)
+        .toString();
+  }
+
+  // As the UI reads it: an anonymous user, with permission checks
+  private StructuredContent getAsGuest(long structuredContentId, String languageId)
+      throws Exception {
+    return structuredContentResourceFactory
+        .create()
+        .user(userLocalService.getGuestUser(TestPropsValues.getCompanyId()))
+        .preferredLocale(Locale.forLanguageTag(languageId))
+        .checkPermissions(true)
+        .build()
+        .getStructuredContent(structuredContentId);
   }
 
   private StructuredContent addArticle(long structureId) throws Exception {
-    var content =
-        structuredContentResource.postSiteStructuredContent(
-            groupId,
-            StructuredContent.toDTO(
-                """
+    return addArticle(structureId, null);
+  }
+
+  private StructuredContent addArticle(long structureId, JournalFolder folder) throws Exception {
+    var dto =
+        StructuredContent.toDTO(
+            """
                 {
                   "contentStructureId": %d,
                   "title": "Rakennetesti",
@@ -312,12 +578,17 @@ public class StructureInitializerTest {
                   ]
                 }
                 """
-                    .formatted(
-                        structureId,
-                        contentField("ingress", "Tiivistelmän teksti"),
-                        contentField("content", "<p>Sisällön teksti</p>"),
-                        contentField("linktext", "Linkin kuvaus"),
-                        contentField("linkurl", "https://example.org"))));
+                .formatted(
+                    structureId,
+                    contentField("ingress", "Tiivistelmän teksti"),
+                    contentField("content", "<p>Sisällön teksti</p>"),
+                    contentField("linktext", "Linkin kuvaus"),
+                    contentField("linkurl", "https://example.org")));
+    var content =
+        folder == null
+            ? structuredContentResource.postSiteStructuredContent(groupId, dto)
+            : structuredContentResource.postStructuredContentFolderStructuredContent(
+                folder.getFolderId(), dto);
     structuredContentIds.add(content.getId());
     return content;
   }
@@ -383,6 +654,25 @@ public class StructureInitializerTest {
     }
   }
 
+  private JournalFolder getNewsFolder() {
+    var folder =
+        journalFolderLocalService.fetchJournalFolderByExternalReferenceCode(
+            NEWS_FOLDER_EXTERNAL_REFERENCE_CODE, groupId);
+    Assert.assertNotNull("Folder " + NEWS_FOLDER_EXTERNAL_REFERENCE_CODE + " not found", folder);
+    return folder;
+  }
+
+  private List<Long> getAllowedStructureIds(JournalFolder folder) throws Exception {
+    return journalFolderLocalService
+        .getDDMStructures(
+            new long[] {groupId},
+            folder.getFolderId(),
+            JournalFolderConstants.RESTRICTION_TYPE_DDM_STRUCTURES_AND_WORKFLOW)
+        .stream()
+        .map(DDMStructure::getStructureId)
+        .toList();
+  }
+
   private String getVersion(long structureId) throws Exception {
     return ddmStructureLocalService.getStructure(structureId).getVersion();
   }
@@ -420,12 +710,23 @@ public class StructureInitializerTest {
     return names;
   }
 
-  /** Deletes the managed structures by their current or former external reference codes. */
+  /**
+   * Deletes the news folder, which refers to the news structure, and the managed structures by
+   * their current or former external reference codes.
+   */
   private void deleteStructures() throws Exception {
+    var folder =
+        journalFolderLocalService.fetchJournalFolderByExternalReferenceCode(
+            NEWS_FOLDER_EXTERNAL_REFERENCE_CODE, groupId);
+    if (folder != null) {
+      journalFolderLocalService.deleteFolder(folder.getFolderId());
+    }
     for (var externalReferenceCode :
         List.of(
             ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE,
             LEGACY_ARTICLE_EXTERNAL_REFERENCE_CODE,
+            NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE,
+            // Last, the structures above use it
             LINK_FIELDSET_EXTERNAL_REFERENCE_CODE,
             LEGACY_FIELDSET_EXTERNAL_REFERENCE_CODE)) {
       var structure = fetchStructure(externalReferenceCode);
