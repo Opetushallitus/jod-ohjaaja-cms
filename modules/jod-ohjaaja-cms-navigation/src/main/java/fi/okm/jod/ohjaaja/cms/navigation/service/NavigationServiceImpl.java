@@ -11,6 +11,7 @@ package fi.okm.jod.ohjaaja.cms.navigation.service;
 
 import com.liferay.asset.kernel.model.AssetCategory;
 import com.liferay.asset.kernel.service.AssetCategoryLocalService;
+import com.liferay.dynamic.data.mapping.service.DDMStructureLocalService;
 import com.liferay.expando.kernel.model.ExpandoBridge;
 import com.liferay.expando.kernel.model.ExpandoColumn;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
@@ -71,7 +72,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -87,10 +90,16 @@ public class NavigationServiceImpl implements NavigationService {
 
   private static final String LANGUAGE_ID_EN_US = "en_US";
   private static final String LANGUAGE_ID_FI_FI = "fi_FI";
+  private static final String LANGUAGE_ID_SV_SE = "sv_SE";
 
   private static final String PROPERTY_CLASS_PK = "classPK";
   private static final String PROPERTY_EXTERNAL_REFERENCE_CODE = "externalReferenceCode";
   private static final String PROPERTY_TITLE = "title";
+  private static final String PROPERTY_DEFAULT_LANGUAGE_ID = "defaultLanguageId";
+  private static final String PROPERTY_NAME_PREFIX = "name_";
+
+  // A submenu in the UI, which has only a localized name
+  private static final String NODE_MENU_ITEM_TYPE = "node";
 
   private static final String ASSET_CATEGORY_CLASS_NAME =
       "com.liferay.asset.kernel.model.AssetCategory";
@@ -100,6 +109,13 @@ public class NavigationServiceImpl implements NavigationService {
   private static final String TYPE_CUSTOM_FIELD_NAME = "Type";
   private static final String TYPE_CATEGORY_MAIN = "CategoryMain";
   private static final String TYPE_STUDY_PROGRAMS_LISTING = "StudyProgramsListing";
+  private static final String TYPE_NEWS_LISTING = "NewsListing";
+
+  private static final Map<String, String> NEWS_LISTING_NAMES =
+      Map.of(
+          LANGUAGE_ID_FI_FI, "Ajankohtaista",
+          LANGUAGE_ID_SV_SE, "Aktuellt",
+          LANGUAGE_ID_EN_US, "News");
 
   private static final String NAVIGATION_MENU_NAME = "JOD Ohjaaja";
   private static final String HIDE_FROM_HOME_PAGE_NEWEST_CAROUSEL_FIELD_NAME =
@@ -115,8 +131,13 @@ public class NavigationServiceImpl implements NavigationService {
     new CustomFieldData(
         TYPE_CUSTOM_FIELD_NAME,
         ExpandoColumnConstants.STRING_ARRAY,
+        // Updated also in an existing column, see initCustomField. The first one is the default.
         new String[] {
-          "Article", "CategoryListing", TYPE_CATEGORY_MAIN, TYPE_STUDY_PROGRAMS_LISTING
+          "Article",
+          "CategoryListing",
+          TYPE_CATEGORY_MAIN,
+          TYPE_STUDY_PROGRAMS_LISTING,
+          TYPE_NEWS_LISTING
         },
         ExpandoColumnConstants.PROPERTY_DISPLAY_TYPE_SELECTION_LIST,
         Map.of(LANGUAGE_ID_FI_FI, "Tyyppi", LANGUAGE_ID_EN_US, "Type")),
@@ -180,6 +201,7 @@ public class NavigationServiceImpl implements NavigationService {
   @Reference private AssetCategoryLocalService assetCategoryLocalService;
   @Reference private MainCategoryService mainCategoryService;
   @Reference private JournalArticleLocalService journalArticleLocalService;
+  @Reference private DDMStructureLocalService ddmStructureLocalService;
 
   @Reference(target = "(model.class.name=com.liferay.asset.kernel.model.AssetCategory)")
   private ModelResourcePermission<AssetCategory> assetCategoryModelResourcePermission;
@@ -359,8 +381,105 @@ public class NavigationServiceImpl implements NavigationService {
     initCustomFields();
     var siteNavigationMenu = initNavigationMenu();
     if (siteNavigationMenu != null) {
-      initMainCategoryMenuItems(siteNavigationMenu);
+      initMenuItems(siteNavigationMenu);
     }
+  }
+
+  // The news listing after the main categories, so that it is created at the end of the top level
+  private void initMenuItems(SiteNavigationMenu siteNavigationMenu) {
+    initMainCategoryMenuItems(siteNavigationMenu);
+    initNewsListingMenuItem(siteNavigationMenu);
+  }
+
+  private void initNewsListingMenuItem(SiteNavigationMenu siteNavigationMenu) {
+    var group = jodOhjaajaCmsUtil.getJodOhjaajaCmsGroup();
+    try {
+      AdminUtil.runAsAdmin(
+          group.getCompanyId(),
+          () ->
+              getOrCreateNewsListingMenuItem(
+                  siteNavigationMenu,
+                  group,
+                  createServiceContext(group, PrincipalThreadLocal.getUserId())));
+    } catch (Exception e) {
+      log.error(
+          "Failed to initialize menu item " + NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE, e);
+    }
+  }
+
+  /**
+   * The menu item of the news listing has a fixed external reference code. Once it exists, it is
+   * used as it is, also if it was moved, renamed or its type was changed in the UI. Only a type
+   * that was never set, e.g. if setting it failed when the item was created, is set. A menu item
+   * created by hand with the type NewsListing is taken over, one at the top level first, and a
+   * missing one is added at the end of the top level as a submenu with only a name.
+   */
+  private synchronized SiteNavigationMenuItem getOrCreateNewsListingMenuItem(
+      SiteNavigationMenu siteNavigationMenu, Group group, ServiceContext serviceContext)
+      throws PortalException {
+    var menuItem =
+        fetchMenuItem(
+            NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE, siteNavigationMenu.getGroupId());
+    if (menuItem != null) {
+      if (menuItem.getSiteNavigationMenuId() != siteNavigationMenu.getSiteNavigationMenuId()) {
+        throw new PortalException(
+            "Menu item "
+                + NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+                + " ("
+                + menuItem.getSiteNavigationMenuItemId()
+                + ") is not in the navigation menu "
+                + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE);
+      }
+      if (!hasTypeValue(menuItem)) {
+        menuItem
+            .getExpandoBridge()
+            .setAttribute(TYPE_CUSTOM_FIELD_NAME, new String[] {TYPE_NEWS_LISTING}, false);
+        log.warn(
+            "Set the missing type of menu item "
+                + NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE
+                + " to "
+                + TYPE_NEWS_LISTING);
+      }
+      return menuItem;
+    }
+
+    menuItem =
+        getMenuItems(siteNavigationMenu).stream()
+            .filter(item -> TYPE_NEWS_LISTING.equals(getTypeCustomFieldValue(item)))
+            .min(
+                Comparator.comparing(
+                    (SiteNavigationMenuItem item) -> item.getParentSiteNavigationMenuItemId() != 0))
+            .orElse(null);
+    if (menuItem != null) {
+      return takeOverMenuItem(menuItem, NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE);
+    }
+
+    var typeSettings =
+        UnicodePropertiesBuilder.create(true)
+            .put(
+                PROPERTY_DEFAULT_LANGUAGE_ID,
+                LocaleUtil.toLanguageId(PortalUtil.getSiteDefaultLocale(group)));
+    NEWS_LISTING_NAMES.forEach(
+        (languageId, name) -> typeSettings.put(PROPERTY_NAME_PREFIX + languageId, name));
+    menuItem =
+        siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
+            NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE,
+            serviceContext.getUserId(),
+            siteNavigationMenu.getGroupId(),
+            siteNavigationMenu.getSiteNavigationMenuId(),
+            0,
+            NODE_MENU_ITEM_TYPE,
+            typeSettings.buildString(),
+            serviceContext);
+    menuItem
+        .getExpandoBridge()
+        .setAttribute(TYPE_CUSTOM_FIELD_NAME, new String[] {TYPE_NEWS_LISTING}, false);
+    log.info(
+        "Created "
+            + TYPE_NEWS_LISTING
+            + " menu item "
+            + NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE);
+    return menuItem;
   }
 
   /**
@@ -475,7 +594,7 @@ public class NavigationServiceImpl implements NavigationService {
           "Navigation menu " + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE + " missing, initializing");
       var siteNavigationMenu = initNavigationMenu();
       if (siteNavigationMenu != null) {
-        initMainCategoryMenuItems(siteNavigationMenu);
+        initMenuItems(siteNavigationMenu);
       }
     }
   }
@@ -652,15 +771,7 @@ public class NavigationServiceImpl implements NavigationService {
               + NAVIGATION_MENU_EXTERNAL_REFERENCE_CODE,
           null);
     }
-    // An unset value reads as the default of the column, the first option of the list
-    var typeValue =
-        ExpandoValueLocalServiceUtil.fetchValue(
-            menuItem.getCompanyId(),
-            SiteNavigationMenuItem.class.getName(),
-            ExpandoTableConstants.DEFAULT_TABLE_NAME,
-            TYPE_CUSTOM_FIELD_NAME,
-            menuItem.getSiteNavigationMenuItemId());
-    if (typeValue == null) {
+    if (!hasTypeValue(menuItem)) {
       menuItem
           .getExpandoBridge()
           .setAttribute(TYPE_CUSTOM_FIELD_NAME, new String[] {TYPE_STUDY_PROGRAMS_LISTING}, false);
@@ -686,6 +797,17 @@ public class NavigationServiceImpl implements NavigationService {
             + TYPE_STUDY_PROGRAMS_LISTING
             + " or delete it",
         null);
+  }
+
+  // An unset value reads as the default of the column, the first option of the list
+  private boolean hasTypeValue(SiteNavigationMenuItem menuItem) {
+    return ExpandoValueLocalServiceUtil.fetchValue(
+            menuItem.getCompanyId(),
+            SiteNavigationMenuItem.class.getName(),
+            ExpandoTableConstants.DEFAULT_TABLE_NAME,
+            TYPE_CUSTOM_FIELD_NAME,
+            menuItem.getSiteNavigationMenuItemId())
+        != null;
   }
 
   private boolean isMenuItemOfCategory(
@@ -841,7 +963,23 @@ public class NavigationServiceImpl implements NavigationService {
                 siteNavigationMenuItem ->
                     toNavigationItemDto(
                         siteNavigationMenuItem, languageId, siteNavigationMenuItemsMap))
-            .collect(Collectors.toList()));
+            .collect(Collectors.toList()),
+        getContentStructures(siteNavigationMenu.getGroupId()));
+  }
+
+  // The structure IDs are not secret, so they are not checked against the guest's permissions
+  private Map<String, Long> getContentStructures(long groupId) {
+    var classNameId = PortalUtil.getClassNameId(JournalArticle.class);
+    var contentStructures = new LinkedHashMap<String, Long>();
+    for (var externalReferenceCode : CONTENT_STRUCTURE_EXTERNAL_REFERENCE_CODES) {
+      var structure =
+          ddmStructureLocalService.fetchStructureByExternalReferenceCode(
+              externalReferenceCode, groupId, classNameId);
+      if (structure != null) {
+        contentStructures.put(externalReferenceCode, structure.getStructureId());
+      }
+    }
+    return contentStructures;
   }
 
   private Map<Long, List<SiteNavigationMenuItem>> getSiteNavigationMenuItemsMap(
@@ -862,7 +1000,7 @@ public class NavigationServiceImpl implements NavigationService {
     var assetCategory = getAssetCategory(type, unicodeProperties, groupId);
     var journalArticle = getJournalArticle(type, unicodeProperties, groupId);
     var name = getName(assetCategory, journalArticle, type, unicodeProperties, languageId);
-    var nameI18n = getNameI18n(assetCategory, journalArticle, type);
+    var nameI18n = getNameI18n(assetCategory, journalArticle, type, unicodeProperties);
     var description = getDescription(assetCategory, journalArticle, type, languageId);
     var descriptionI18n = getDescriptionI18n(assetCategory, journalArticle, type);
     var externalReferenceCode =
@@ -1002,19 +1140,54 @@ public class NavigationServiceImpl implements NavigationService {
           (article != null)
               ? article.getTitle(languageId)
               : unicodeProperties.getProperty(PROPERTY_TITLE);
-      default -> unicodeProperties.getProperty(PROPERTY_TITLE);
+      default -> getLocalizedName(unicodeProperties, languageId);
     };
   }
 
+  // The localized name of e.g. a submenu or a URL, or the title of an item without one
+  private static String getLocalizedName(UnicodeProperties unicodeProperties, String languageId) {
+    var names = getLocalizedNames(unicodeProperties);
+    if (names.isEmpty()) {
+      return unicodeProperties.getProperty(PROPERTY_TITLE);
+    }
+    var name = names.get(LocaleUtil.fromLanguageId(languageId));
+    if (Validator.isNull(name)) {
+      name =
+          names.get(
+              LocaleUtil.fromLanguageId(
+                  unicodeProperties.getProperty(PROPERTY_DEFAULT_LANGUAGE_ID, languageId)));
+    }
+    return Validator.isNull(name) ? names.values().iterator().next() : name;
+  }
+
+  private static Map<Locale, String> getLocalizedNames(UnicodeProperties unicodeProperties) {
+    var names = new LinkedHashMap<Locale, String>();
+    unicodeProperties.forEach(
+        (key, value) -> {
+          if (key.startsWith(PROPERTY_NAME_PREFIX) && Validator.isNotNull(value)) {
+            var locale =
+                LocaleUtil.fromLanguageId(
+                    key.substring(PROPERTY_NAME_PREFIX.length()), true, false);
+            if (locale != null) {
+              names.put(locale, value);
+            }
+          }
+        });
+    return names;
+  }
+
   private Map<String, String> getNameI18n(
-      AssetCategory category, JournalArticle article, SiteNavigationMenuItemType type) {
+      AssetCategory category,
+      JournalArticle article,
+      SiteNavigationMenuItemType type,
+      UnicodeProperties unicodeProperties) {
 
     return switch (type) {
       case ASSET_CATEGORY ->
           (category != null) ? LocalizedMapUtil.getI18nMap(category.getTitleMap()) : Map.of();
       case JOURNAL_ARTICLE ->
           (article != null) ? LocalizedMapUtil.getI18nMap(article.getTitleMap()) : Map.of();
-      default -> Map.of();
+      default -> LocalizedMapUtil.getI18nMap(getLocalizedNames(unicodeProperties));
     };
   }
 
@@ -1068,7 +1241,11 @@ public class NavigationServiceImpl implements NavigationService {
             : "CategoryListing";
       }
       case JOURNAL_ARTICLE -> "Article";
-      default -> siteNavigationMenuItem.getType();
+      // Not the default of the column, so it is set only if it was chosen
+      default ->
+          TYPE_NEWS_LISTING.equals(getTypeCustomFieldValue(siteNavigationMenuItem))
+              ? TYPE_NEWS_LISTING
+              : siteNavigationMenuItem.getType();
     };
   }
 
