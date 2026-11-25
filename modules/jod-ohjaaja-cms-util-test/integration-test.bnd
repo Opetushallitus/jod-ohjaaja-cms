@@ -1,0 +1,5 @@
+# Instructions for the in-container test bundle that Liferay's Arquillian bridge builds with bnd.
+# Awaitility is not provided by Liferay, so it is embedded. Its optional proxy dependencies are
+# never used.
+Private-Package: org.awaitility.*
+Import-Package: !net.sf.cglib.*, !org.objenesis.*

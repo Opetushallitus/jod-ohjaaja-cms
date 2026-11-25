@@ -6,4 +6,5 @@ apply from: rootProject.file('gradle/jod.integration-test.gradle')
 
 dependencies {
   testImplementation project(':modules:jod-ohjaaja-cms-util')
+  testImplementation libs.awaitility
 }
