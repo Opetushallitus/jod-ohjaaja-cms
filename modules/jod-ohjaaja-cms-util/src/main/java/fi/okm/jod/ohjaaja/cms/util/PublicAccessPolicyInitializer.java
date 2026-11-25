@@ -44,7 +44,9 @@ public class PublicAccessPolicyInitializer {
                   // GET /headless-delivery/v1.0/sites/{siteId}/structured-contents
                   STRUCTURED_CONTENT_RESOURCE + "#getSiteStructuredContentsPage",
                   // GET /headless-delivery/v1.0/structured-contents/{structuredContentId}
-                  STRUCTURED_CONTENT_RESOURCE + "#getStructuredContent"),
+                  STRUCTURED_CONTENT_RESOURCE + "#getStructuredContent",
+                  // GET .../sites/{siteId}/structured-contents/by-external-reference-code/{erc}
+                  STRUCTURED_CONTENT_RESOURCE + "#getSiteStructuredContentByExternalReferenceCode"),
               "Public access to headless-delivery for jod-ohjaaja-ui"),
           new Policy(
               "JOD_OHJAAJA_NAVIGATION",

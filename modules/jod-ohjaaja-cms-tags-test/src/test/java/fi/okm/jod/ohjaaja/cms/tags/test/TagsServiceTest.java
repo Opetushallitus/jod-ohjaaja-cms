@@ -221,7 +221,10 @@ public class TagsServiceTest {
     var resource =
         "com.liferay.headless.delivery.internal.resource.v1_0.StructuredContentResourceImpl";
     Assert.assertEquals(
-        Set.of(resource + "#getSiteStructuredContentsPage", resource + "#getStructuredContent"),
+        Set.of(
+            resource + "#getSiteStructuredContentsPage",
+            resource + "#getStructuredContent",
+            resource + "#getSiteStructuredContentByExternalReferenceCode"),
         Set.copyOf(sapEntry.getAllowedServiceSignatures().lines().toList()));
   }
 
