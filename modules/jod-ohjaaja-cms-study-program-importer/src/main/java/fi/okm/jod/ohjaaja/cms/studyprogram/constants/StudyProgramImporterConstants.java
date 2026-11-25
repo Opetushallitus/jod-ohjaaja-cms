@@ -10,12 +10,14 @@
 package fi.okm.jod.ohjaaja.cms.studyprogram.constants;
 
 import com.liferay.portal.kernel.util.LocaleUtil;
+import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import java.util.Locale;
 
 public final class StudyProgramImporterConstants {
   private StudyProgramImporterConstants() {}
 
-  public static final String EXTERNAL_REFERENCE_CODE = "ohjaaja-study-program";
+  public static final String EXTERNAL_REFERENCE_CODE =
+      NavigationService.STUDY_PROGRAM_STRUCTURE_EXTERNAL_REFERENCE_CODE;
   public static final String STUDY_PROGRAM_TAG_CATEGORY_EXTERNAL_REFERENCE_CODE =
       "ohjaaja-study-program-tag-category";
   public static final String STUDY_PROGRAM_TAG_CATEGORY_FINNISH_TITLE = "Koulutus";

@@ -13,12 +13,22 @@ import jakarta.validation.constraints.NotNull;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * @param contentStructures the IDs of the content structures by their external reference codes,
+ *     without the ones that do not exist
+ */
 public record NavigationDto(
-    @NotNull Long id, @NotNull Long siteId, @NotNull List<NavigationItemDto> navigationItems)
+    @NotNull Long id,
+    @NotNull Long siteId,
+    @NotNull List<NavigationItemDto> navigationItems,
+    @NotNull Map<String, Long> contentStructures)
     implements Serializable {
   public NavigationDto {
     navigationItems =
         navigationItems == null ? null : Collections.unmodifiableList(navigationItems);
+    contentStructures =
+        contentStructures == null ? null : Collections.unmodifiableMap(contentStructures);
   }
 }

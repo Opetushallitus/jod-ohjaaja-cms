@@ -16,6 +16,7 @@ import com.liferay.asset.kernel.service.AssetCategoryLocalService;
 import com.liferay.asset.kernel.service.AssetVocabularyLocalService;
 import com.liferay.dynamic.data.mapping.service.DDMStructureLocalService;
 import com.liferay.expando.kernel.model.ExpandoTableConstants;
+import com.liferay.expando.kernel.service.ExpandoColumnLocalService;
 import com.liferay.expando.kernel.service.ExpandoValueLocalService;
 import com.liferay.journal.model.JournalArticle;
 import com.liferay.journal.service.JournalArticleLocalService;
@@ -50,6 +51,8 @@ import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingExc
 import fi.okm.jod.ohjaaja.cms.navigation.service.MainCategoryService;
 import fi.okm.jod.ohjaaja.cms.navigation.service.NavigationService;
 import fi.okm.jod.ohjaaja.cms.util.JodOhjaajaCmsUtil;
+import fi.okm.jod.ohjaaja.cms.util.StructureInitializer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -83,6 +86,7 @@ public class NavigationServiceTest {
   @Inject private static RoleLocalService roleLocalService;
   @Inject private static ResourcePermissionLocalService resourcePermissionLocalService;
   @Inject private static ExpandoValueLocalService expandoValueLocalService;
+  @Inject private static ExpandoColumnLocalService expandoColumnLocalService;
   @Inject private static DDMStructureLocalService ddmStructureLocalService;
   @Inject private static JournalArticleLocalService journalArticleLocalService;
 
@@ -863,6 +867,198 @@ public class NavigationServiceTest {
         .filter(item -> item.id() == id)
         .findFirst()
         .orElseThrow(() -> new AssertionError("Navigation item " + id + " not found"));
+  }
+
+  @Test
+  public void shouldCreateNewsListingMenuItemAtTheTopLevel() {
+    var menuItem = fetchNewsListingMenuItem();
+    Assert.assertNotNull("The news listing menu item should be created on startup", menuItem);
+    Assert.assertEquals(
+        fetchNavigationMenu().getSiteNavigationMenuId(), menuItem.getSiteNavigationMenuId());
+    Assert.assertEquals(0, menuItem.getParentSiteNavigationMenuItemId());
+
+    var item =
+        findItem(
+            navigationService.getNavigation().navigationItems(),
+            menuItem.getSiteNavigationMenuItemId());
+    Assert.assertEquals("NewsListing", item.type());
+    Assert.assertEquals(
+        NavigationService.NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE,
+        item.externalReferenceCode());
+    Assert.assertEquals(
+        Map.of("fi-FI", "Ajankohtaista", "sv-SE", "Aktuellt", "en-US", "News"), item.name_i18n());
+    Assert.assertEquals("ajankohtaista", item.slug_i18n().get("fi-FI"));
+    Assert.assertNull(item.categoryId());
+    Assert.assertNull(item.articleId());
+
+    // Nothing is created again
+    var menuItemCount = countMenuItems();
+    navigationService.initNavigation();
+    Assert.assertEquals(menuItemCount, countMenuItems());
+    Assert.assertEquals(
+        menuItem.getSiteNavigationMenuItemId(),
+        fetchNewsListingMenuItem().getSiteNavigationMenuItemId());
+  }
+
+  @Test
+  public void shouldSetTheTypeOfNewsListingMenuItemOnlyIfItWasNeverSet() throws Exception {
+    var menuItem = fetchNewsListingMenuItem();
+    Assert.assertNotNull(menuItem);
+    var menuItemId = menuItem.getSiteNavigationMenuItemId();
+
+    try {
+      // As if setting the type had failed when the item was created
+      expandoValueLocalService.deleteValue(
+          menuItem.getCompanyId(),
+          SiteNavigationMenuItem.class.getName(),
+          ExpandoTableConstants.DEFAULT_TABLE_NAME,
+          "Type",
+          menuItemId);
+      Assert.assertEquals(
+          "node", findItem(navigationService.getNavigation().navigationItems(), menuItemId).type());
+
+      navigationService.initNavigation();
+
+      Assert.assertEquals(
+          "NewsListing",
+          findItem(navigationService.getNavigation().navigationItems(), menuItemId).type());
+
+      // A type changed in the UI is kept
+      menuItem.getExpandoBridge().setAttribute("Type", new String[] {"Article"}, false);
+      navigationService.initNavigation();
+      Assert.assertEquals(
+          "node", findItem(navigationService.getNavigation().navigationItems(), menuItemId).type());
+    } finally {
+      menuItem.getExpandoBridge().setAttribute("Type", new String[] {"NewsListing"}, false);
+    }
+  }
+
+  @Test
+  public void shouldTakeOverNewsListingMenuItemByItsType() throws Exception {
+    var menuItem = fetchNewsListingMenuItem();
+    Assert.assertNotNull(menuItem);
+    SiteNavigationMenuItem handMadeMenuItem = null;
+
+    try {
+      siteNavigationMenuItemLocalService.deleteSiteNavigationMenuItem(
+          menuItem.getSiteNavigationMenuItemId());
+      // As created by hand, recognized only by its type
+      handMadeMenuItem =
+          siteNavigationMenuItemLocalService.addSiteNavigationMenuItem(
+              "nav-test-news-item-" + System.currentTimeMillis(),
+              TestPropsValues.getUserId(),
+              TEST_GROUP_ID,
+              fetchNavigationMenu().getSiteNavigationMenuId(),
+              0,
+              "url",
+              "name=Uutiset\nurl=/uutiset\n",
+              getServiceContext());
+      handMadeMenuItem.getExpandoBridge().setAttribute("Type", new String[] {"NewsListing"}, false);
+
+      navigationService.initNavigation();
+
+      var takenOverMenuItem = fetchNewsListingMenuItem();
+      Assert.assertNotNull(takenOverMenuItem);
+      Assert.assertEquals(
+          handMadeMenuItem.getSiteNavigationMenuItemId(),
+          takenOverMenuItem.getSiteNavigationMenuItemId());
+      Assert.assertEquals(
+          "NewsListing",
+          findItem(
+                  navigationService.getNavigation().navigationItems(),
+                  takenOverMenuItem.getSiteNavigationMenuItemId())
+              .type());
+    } finally {
+      // Created again as on startup
+      deleteMenuItems(handMadeMenuItem);
+      navigationService.initNavigation();
+    }
+  }
+
+  @Test
+  public void shouldClearNavigationCacheWhenNewsListingMenuItemChanges() {
+    var menuItem = fetchNewsListingMenuItem();
+    Assert.assertNotNull(menuItem);
+    var originalTypeSettings = menuItem.getTypeSettings();
+
+    try {
+      var navigation = getCachedNavigation();
+      Assert.assertEquals(
+          "Ajankohtaista",
+          findItem(navigation.navigationItems(), menuItem.getSiteNavigationMenuItemId())
+              .name_i18n()
+              .get("fi-FI"));
+
+      var typeSettings = UnicodePropertiesBuilder.fastLoad(originalTypeSettings).build();
+      typeSettings.setProperty("name_fi_FI", "Uutiset");
+      menuItem.setTypeSettings(typeSettings.toString());
+      siteNavigationMenuItemLocalService.updateSiteNavigationMenuItem(menuItem);
+
+      var navigationAfterChange = navigationService.getNavigation();
+      Assert.assertNotSame(navigation, navigationAfterChange);
+      Assert.assertEquals(
+          "Uutiset",
+          findItem(navigationAfterChange.navigationItems(), menuItem.getSiteNavigationMenuItemId())
+              .name_i18n()
+              .get("fi-FI"));
+    } finally {
+      menuItem = fetchNewsListingMenuItem();
+      menuItem.setTypeSettings(originalTypeSettings);
+      siteNavigationMenuItemLocalService.updateSiteNavigationMenuItem(menuItem);
+    }
+  }
+
+  @Test
+  public void shouldAddNewsListingToTheTypesOfAnExistingTypeColumn() throws Exception {
+    var column =
+        expandoColumnLocalService.getColumn(
+            TestPropsValues.getCompanyId(),
+            SiteNavigationMenuItem.class.getName(),
+            ExpandoTableConstants.DEFAULT_TABLE_NAME,
+            "Type");
+    // As created before the news listing
+    expandoColumnLocalService.updateColumn(
+        column.getColumnId(),
+        column.getName(),
+        column.getType(),
+        new String[] {"Article", "CategoryListing", "CategoryMain", "StudyProgramsListing"});
+
+    navigationService.initNavigation();
+
+    Assert.assertEquals(
+        List.of(
+            "Article", "CategoryListing", "CategoryMain", "StudyProgramsListing", "NewsListing"),
+        Arrays.asList(
+            (String[])
+                expandoColumnLocalService.getColumn(column.getColumnId()).getDefaultValue()));
+  }
+
+  @Test
+  public void shouldGetIdsOfContentStructures() {
+    var contentStructures = navigationService.getNavigation().contentStructures();
+
+    // Created on startup, the study program structure only by the importer
+    for (var externalReferenceCode :
+        List.of(
+            StructureInitializer.ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE,
+            StructureInitializer.NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE)) {
+      var structure =
+          ddmStructureLocalService.fetchStructureByExternalReferenceCode(
+              externalReferenceCode,
+              TEST_GROUP_ID,
+              PortalUtil.getClassNameId(JournalArticle.class));
+      Assert.assertNotNull(externalReferenceCode + " should exist", structure);
+      Assert.assertEquals(
+          Long.valueOf(structure.getStructureId()), contentStructures.get(externalReferenceCode));
+    }
+    Assert.assertTrue(
+        NavigationService.CONTENT_STRUCTURE_EXTERNAL_REFERENCE_CODES.containsAll(
+            contentStructures.keySet()));
+  }
+
+  private static SiteNavigationMenuItem fetchNewsListingMenuItem() {
+    return siteNavigationMenuItemLocalService.fetchSiteNavigationMenuItemByExternalReferenceCode(
+        NavigationService.NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE, TEST_GROUP_ID);
   }
 
   @Test

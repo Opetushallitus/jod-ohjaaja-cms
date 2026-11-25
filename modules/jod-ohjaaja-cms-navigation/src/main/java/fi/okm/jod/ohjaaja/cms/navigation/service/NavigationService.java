@@ -18,6 +18,8 @@ import fi.okm.jod.ohjaaja.cms.navigation.dto.NavigationDto;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.MultipleStudyProgramListingMenuItemExpection;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.NavigationMenuItemPersistenceException;
 import fi.okm.jod.ohjaaja.cms.navigation.exception.StudyProgramListingMissingException;
+import fi.okm.jod.ohjaaja.cms.util.StructureInitializer;
+import java.util.List;
 
 public interface NavigationService {
 
@@ -27,6 +29,22 @@ public interface NavigationService {
   /** The menu item the study programs are added under, if it is created by the importer. */
   String STUDY_PROGRAMS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE =
       "jod-ohjaaja-cms-study-programs-listing";
+
+  /** The top-level menu item of the news listing, Ajankohtaista. */
+  String NEWS_LISTING_MENU_ITEM_EXTERNAL_REFERENCE_CODE = "jod-ohjaaja-cms-navigation-news";
+
+  /** The structure of the study program articles, created by the study program importer. */
+  String STUDY_PROGRAM_STRUCTURE_EXTERNAL_REFERENCE_CODE = "ohjaaja-study-program";
+
+  /**
+   * The structures whose IDs are in the navigation, so that the UI can tell the content types apart
+   * by the structure ID of a content item.
+   */
+  List<String> CONTENT_STRUCTURE_EXTERNAL_REFERENCE_CODES =
+      List.of(
+          StructureInitializer.ARTICLE_STRUCTURE_EXTERNAL_REFERENCE_CODE,
+          StructureInitializer.NEWS_STRUCTURE_EXTERNAL_REFERENCE_CODE,
+          STUDY_PROGRAM_STRUCTURE_EXTERNAL_REFERENCE_CODE);
 
   void addOrUpdateStudyProgramNavigationMenuItem(
       JournalArticle studyProgramJournalArticle, ServiceContext serviceContext)
@@ -56,9 +74,9 @@ public interface NavigationService {
 
   /**
    * Creates the custom fields of the menu items, the navigation menu and the menu items of the main
-   * categories (see {@link MainCategoryService}). A menu created by hand before the menu had an
-   * external reference code is taken over instead of creating another one. A menu item is created
-   * with the external reference code of its category.
+   * categories (see {@link MainCategoryService}) and of the news listing. A menu created by hand
+   * before the menu had an external reference code is taken over instead of creating another one. A
+   * menu item of a main category is created with the external reference code of its category.
    */
   void initNavigation();
 }
